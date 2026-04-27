@@ -37,6 +37,15 @@ class PatentFamily(BaseModel):
     members: list[str]
 
 
+# All 39 EPO member states by ISO 3166-1 alpha-2 codes.
+EP_MEMBER_STATES: list[str] = [
+    "AL", "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE",
+    "ES", "FI", "FR", "GB", "GR", "HR", "HU", "IE", "IS", "IT",
+    "LI", "LT", "LU", "LV", "MC", "ME", "MK", "MT", "NL", "NO",
+    "PL", "PT", "RO", "RS", "SE", "SI", "SK", "SM", "TR",
+]
+
+
 class EpoClient:
     """Typed client wrapping EPO Open Patent Services API."""
 
@@ -117,6 +126,71 @@ class EpoClient:
                     if len(records) < batch_size:
                         break
                     start += batch_size
+
+    async def fetch_patents_by_country(
+        self,
+        country: str,
+        since: date,
+        batch_size: int = 100,
+    ) -> AsyncIterator[PatentRecord]:
+        """Fetch patents for a specific EPO member state.
+
+        Constructs an OPS query filtering by country office in the publication
+        reference.
+        """
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            token = await self._ensure_token(client)
+            headers = {"Authorization": f"Bearer {token}"}
+
+            query = f'pn={country} and pd>={since.strftime("%Y%m%d")}'
+            start = 1
+            while True:
+                end = start + batch_size - 1
+                url = f"{OPS_API_URL}/published-data/search"
+
+                async def _do_get(
+                    q: str = query, s: int = start, e: int = end
+                ) -> httpx.Response:
+                    resp = await client.get(
+                        url,
+                        params={"q": q, "Range": f"{s}-{e}"},
+                        headers=headers,
+                    )
+                    resp.raise_for_status()
+                    return resp
+
+                try:
+                    response = await self._retry.execute(_do_get)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 404:
+                        break
+                    raise
+
+                records = self._parse_ops_response(response.json())
+                if not records:
+                    break
+
+                for record in records:
+                    yield record
+
+                if len(records) < batch_size:
+                    break
+                start += batch_size
+
+    async def fetch_all_member_state_patents(
+        self,
+        since: date,
+        batch_size: int = 100,
+    ) -> AsyncIterator[PatentRecord]:
+        """Iterate over all EP member states and yield patents from each.
+
+        Provides full EPO geographic coverage across all 39 member states.
+        """
+        for country in EP_MEMBER_STATES:
+            async for record in self.fetch_patents_by_country(
+                country=country, since=since, batch_size=batch_size
+            ):
+                yield record
 
     async def get_patent_family(
         self,

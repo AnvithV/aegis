@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pytest
 import respx
 from httpx import Response
 
 from aegis.sources.epo import (
-    EpoClient,
-    EpoCredentials,
+    EP_MEMBER_STATES,
     OPS_API_URL,
     OPS_AUTH_URL,
+    EpoClient,
+    EpoCredentials,
     PatentFamily,
 )
 from aegis.sources.uspto import PatentRecord
 
 # ── Fixture data ──────────────────────────────────────────────────────────────
 
-SAMPLE_OPS_RESPONSE: dict = {
+SAMPLE_OPS_RESPONSE: dict[str, Any] = {
     "ops:world-patent-data": {
         "ops:biblio-search": {
             "ops:search-result": {
@@ -48,7 +50,7 @@ SAMPLE_OPS_RESPONSE: dict = {
     }
 }
 
-SAMPLE_FAMILY_RESPONSE: dict = {
+SAMPLE_FAMILY_RESPONSE: dict[str, Any] = {
     "ops:world-patent-data": {
         "ops:patent-family": {
             "@family-id": "FAM-12345",
@@ -82,7 +84,10 @@ SAMPLE_FAMILY_RESPONSE: dict = {
     }
 }
 
-AUTH_RESPONSE: dict = {"access_token": "test-token-123", "token_type": "Bearer"}
+AUTH_RESPONSE: dict[str, Any] = {
+    "access_token": "test-token-123",
+    "token_type": "Bearer",
+}
 
 
 @pytest.fixture
@@ -161,7 +166,7 @@ async def test_fetch_pagination(client: EpoClient) -> None:
             }
         }
     }
-    empty_data: dict = {
+    empty_data: dict[str, Any] = {
         "ops:world-patent-data": {
             "ops:biblio-search": {
                 "ops:search-result": {
@@ -214,3 +219,63 @@ async def test_get_patent_family(client: EpoClient) -> None:
     assert isinstance(family, PatentFamily)
     assert family.family_id == "FAM-12345"
     assert len(family.members) == 3
+
+
+def test_ep_member_states_count() -> None:
+    """EP_MEMBER_STATES has exactly 39 entries."""
+    assert len(EP_MEMBER_STATES) == 39
+    # Spot-check a few expected countries
+    assert "DE" in EP_MEMBER_STATES
+    assert "FR" in EP_MEMBER_STATES
+    assert "GB" in EP_MEMBER_STATES
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_patents_by_country(client: EpoClient) -> None:
+    """fetch_patents_by_country yields PatentRecord objects for a country."""
+    respx.post(OPS_AUTH_URL).mock(
+        return_value=Response(200, json=AUTH_RESPONSE),
+    )
+
+    country_data = {
+        "ops:world-patent-data": {
+            "ops:biblio-search": {
+                "ops:search-result": {
+                    "ops:publication-reference": [
+                        {
+                            "document-id": {
+                                "doc-number": "9000001",
+                                "kind": "A1",
+                            }
+                        },
+                    ]
+                }
+            }
+        }
+    }
+    empty_data: dict[str, Any] = {
+        "ops:world-patent-data": {
+            "ops:biblio-search": {
+                "ops:search-result": {
+                    "ops:publication-reference": []
+                }
+            }
+        }
+    }
+
+    search_url = f"{OPS_API_URL}/published-data/search"
+    route = respx.get(search_url)
+    route.side_effect = [
+        Response(200, json=country_data),
+        Response(200, json=empty_data),
+    ]
+
+    results: list[PatentRecord] = []
+    async for rec in client.fetch_patents_by_country(
+        country="DE", since=date(2023, 1, 1), batch_size=1
+    ):
+        results.append(rec)
+
+    assert len(results) == 1
+    assert results[0].patent_number == "EP9000001A1"

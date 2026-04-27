@@ -1,5 +1,60 @@
 # Plan: Phase 2e — Observability + Error Handling
 
+> **Status:** COMPLETE (2026-04-27)
+> All 6 tasks completed. 31/31 Phase 2e tests passing. 561/561 Phase 0/1 tests passing. Validated by agent team with build evidence.
+
+## Build Evidence
+
+> **Status:** COMPLETE
+> **Date:** 2026-04-27
+> **Team:** phase2e-observability-20260427-1520
+
+### Test Results
+- `phase2_observability_test.py` — 12/12 PASSED
+- `ambiguity_handling_test.py` — 6/6 PASSED
+- `phase2_identity_test.py` — 7/7 PASSED
+- `failure_log_test.py` — 5/5 PASSED
+- `test_cross_pop_merge.py` — 1/1 PASSED
+- **Phase 0/1 regression suite** — 561/561 PASSED (no regressions)
+
+### Validation Commands
+- `uv run pytest ... -v` — **PASS** (31/31 tests passed in 0.98s)
+- `uv run mypy ...` — **PASS** (no issues found in 9 source files)
+- `uv run ruff check ...` — **PASS** (all checks passed)
+
+### Acceptance Criteria Verification
+- [x] Specialty distribution dashboard shows per-specialty cohort sizes and multi-specialty rates — VERIFIED (`SpecialtyDistDashboard.compute()` returns `per_specialty_count`, `per_specialty_pct`, `multi_specialty_count`, `multi_specialty_pct`, `multi_specialty_distribution`)
+- [x] Reassignment-rate tracker alerts when churn > 5% — VERIFIED (`ReassignmentMetrics` with `CHURN_ALERT_THRESHOLD = 0.05`, emits `ReassignmentAlert` on breach)
+- [x] Patent-vs-paper signal balance shows per-candidate and cohort-level contribution breakdown — VERIFIED (`SignalBalanceDashboard.compute_candidate()` and `compute_cohort()` return `SignalBalanceMetrics` with patent/paper/clinical_trial ratios)
+- [x] Clinician coverage diagnostics reports NPI cross-link rate, ABMS/state-board/hospital-tier coverage, publication rate, and gap-state flags — VERIFIED (`ClinicianCoverageDashboard.compute()` returns `ClinicianCoverageMetrics` with `npi_count`, `abms_coverage_pct`, `state_board_coverage_pct`, `hospital_tier_pct`, `publication_pct`, `gap_states`)
+- [x] Cross-population merge accuracy tracks precision (target >= 99%) and recall (target >= 85%) — VERIFIED (`MergeAccuracyTracker.evaluate()` with `PRECISION_TARGET = 0.99`, `RECALL_TARGET = 0.85`, returns `meets_precision_target`/`meets_recall_target`)
+- [x] Ambiguity handler produces dual-rank for < 0.6 confidence, single-rank for >= 0.6 — VERIFIED (`AmbiguityHandler` with `AMBIGUITY_THRESHOLD = 0.6`, returns `DualRankResult` with single or dual ranking)
+- [x] Patent conflict handler surfaces conflicts to HITL and excludes patents from v_c — VERIFIED (`PatentConflictHandler.get_excluded_patents()` returns patents with pending/excluded status; conflicts surfaced via `add_conflict()`)
+- [x] NPI-PubMed matcher NEVER auto-links below 0.95 confidence — VERIFIED (`NpiPubmedMatcher` with `AUTO_LINK_THRESHOLD = 0.95`, routes to "review" (0.5–0.95) or "reject" (< 0.5))
+- [x] Conference failure log logs without blocking pipeline and tracks per-conference failure rates — VERIFIED (`ConferenceFailureLog.log_failure()` non-blocking, `get_stats()` returns `ConferenceFailureStats` with `failure_rate` per conference)
+- [x] All new tests pass — VERIFIED (31/31 passed)
+- [x] mypy strict mode passes — VERIFIED (0 issues in 9 files)
+- [x] ruff lint passes — VERIFIED (all checks passed)
+- [x] No existing Phase 0/1 tests broken — VERIFIED (561/561 passed)
+
+### Files Changed
+| File | Action | Verified |
+|------|--------|----------|
+| `src/aegis/observability/specialty_dist.py` | Created | Yes |
+| `src/aegis/observability/reassignment_metrics.py` | Created | Yes |
+| `src/aegis/observability/signal_balance.py` | Created | Yes |
+| `src/aegis/observability/clinician_coverage.py` | Created | Yes |
+| `src/aegis/observability/merge_accuracy.py` | Created | Yes |
+| `src/aegis/observability/phase2_observability_test.py` | Created | Yes |
+| `src/aegis/scoring/ambiguity_handling.py` | Created | Yes |
+| `src/aegis/scoring/ambiguity_handling_test.py` | Created | Yes |
+| `src/aegis/identity/patent_conflicts.py` | Created | Yes |
+| `src/aegis/identity/npi_pubmed_match.py` | Created | Yes |
+| `src/aegis/identity/phase2_identity_test.py` | Created | Yes |
+| `src/aegis/sources/conferences/failure_log.py` | Created | Yes |
+| `src/aegis/sources/conferences/failure_log_test.py` | Created | Yes |
+| `tests/regression/test_cross_pop_merge.py` | Created | Yes |
+
 > **EXECUTION DIRECTIVE**: This is a team-orchestrated plan.
 > **FORBIDDEN**: Direct implementation (Edit, Write, NotebookEdit) by the main agent. If you are the main conversation agent and a user asks you to implement this plan, you MUST invoke `/build specs/aegis-phase2e-observability.md` -- do NOT implement it yourself.
 > **REQUIRED**: Execute ONLY via the `/build` command, which deploys team agents to do the work.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pytest
 import respx
@@ -16,7 +17,7 @@ from aegis.sources.uspto import (
 
 # ── Fixture data ──────────────────────────────────────────────────────────────
 
-SAMPLE_PATENT: dict = {
+SAMPLE_PATENT: dict[str, Any] = {
     "patent_number": "US10123456B2",
     "patent_date": "2023-06-15",
     "patent_title": "Kinase Inhibitor Compound",
@@ -50,7 +51,7 @@ SAMPLE_PATENT: dict = {
     ],
 }
 
-SAMPLE_PATENT_MINIMAL: dict = {
+SAMPLE_PATENT_MINIMAL: dict[str, Any] = {
     "patent_number": "US9999999B1",
     "patent_date": "2022-01-10",
     "patent_title": "Minimal Patent",
