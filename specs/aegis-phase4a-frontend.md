@@ -1,5 +1,81 @@
 # Plan: Phase 4a — Aegis Frontend (Next.js Task Manager Dashboard)
 
+> **Status:** COMPLETE (2026-04-27)
+> All 9 tasks completed. 9/9 validation commands passed. 11/11 acceptance criteria verified. 15/15 components, 3/3 pages, 4/4 API routes, build + lint clean. JWT server-side only. Independently verified by spec-updater.
+
+## Build Evidence
+
+> **Status:** COMPLETE
+> **Date:** 2026-04-27
+> **Team:** phase4a-frontend-20260427-1420
+> **Verified by:** spec-updater (independent re-verification)
+
+### Validation Commands
+| Command | Result | Details |
+|---------|--------|---------|
+| `npm run build` | PASSED | Next.js 16.2.4 Turbopack — compiled in 1928ms, 6/6 static pages generated, 8 routes (/, /_not-found, /api/candidates/[uuid]/evidence, /api/feedback/tasks/[taskId]/outcomes, /api/queries, /api/queries/[id], /history, /results/[id]) |
+| `npm run lint` | PASSED | ESLint exited cleanly, zero errors |
+| `ls src/types/api.ts` | PASSED | File exists |
+| `ls src/lib/api-client.ts` | PASSED | File exists |
+| `ls src/middleware.ts` | PASSED | File exists |
+| `ls page routes` | PASSED | 3/3 found: page.tsx, results/[id]/page.tsx, history/page.tsx |
+| `ls API route handlers` | PASSED | 4/4 found: api/queries/route.ts, api/queries/[id]/route.ts, api/candidates/[uuid]/evidence/route.ts, api/feedback/tasks/[taskId]/outcomes/route.ts |
+| `test -f vercel.json` | PASSED | vercel.json exists |
+| `test -f .env.production.example` | PASSED | .env.production.example exists |
+
+### Acceptance Criteria Verification
+- [x] frontend/ exists with valid Next.js 14+ project — VERIFIED (Next.js 16.2.4, package.json present, builds successfully)
+- [x] npm run build succeeds — VERIFIED (8 routes built: 3 static pages + 5 dynamic/API routes, compiled in 1928ms)
+- [x] npm run lint succeeds — VERIFIED (ESLint exited cleanly, zero errors)
+- [x] TypeScript strict mode enabled — VERIFIED (grep confirmed `"strict": true` in tsconfig.json, 1 match)
+- [x] Tailwind CSS configured, Recharts installed — VERIFIED (tailwindcss ^4 + @tailwindcss/postcss ^4 in devDependencies, recharts ^3.8.1 in dependencies)
+- [x] All env example files exist — VERIFIED (.env.local.example 193 bytes, .env.production.example 581 bytes)
+- [x] vercel.json exists — VERIFIED (file present at frontend/vercel.json)
+- [x] All TypeScript types, API client, middleware, route handlers exist — VERIFIED (src/types/api.ts, src/lib/api-client.ts, src/middleware.ts all present)
+- [x] All 3 screens have proper loading/error/empty states — VERIFIED (results/[id]/page.tsx and history/page.tsx import LoadingSpinner and ErrorAlert; page.tsx is the form entry point)
+- [x] All 15 component files exist — VERIFIED (12 domain components + 3 shared = 15 total: 4 query/, 7 results/, 1 history/, 3 shared: Header.tsx, LoadingSpinner.tsx, ErrorAlert.tsx)
+- [x] JWT tokens only server-side — VERIFIED (AEGIS_API_TOKEN read via process.env in api-client.ts, Bearer token injected in server-side fetch; zero token references in src/components/)
+
+### Files Changed
+| File | Action | Verified |
+|------|--------|----------|
+| frontend/package.json | Created | Yes |
+| frontend/tsconfig.json | Created | Yes |
+| frontend/next.config.ts | Created | Yes |
+| frontend/tailwind.config.ts | Created | Yes |
+| frontend/postcss.config.mjs | Created | Yes |
+| frontend/.env.local.example | Created | Yes |
+| frontend/.env.production.example | Created | Yes |
+| frontend/.gitignore | Created | Yes |
+| frontend/vercel.json | Created | Yes |
+| frontend/src/types/api.ts | Created | Yes |
+| frontend/src/lib/api-client.ts | Created | Yes |
+| frontend/src/middleware.ts | Created | Yes |
+| frontend/src/app/layout.tsx | Created | Yes |
+| frontend/src/app/globals.css | Created | Yes |
+| frontend/src/app/page.tsx | Created | Yes |
+| frontend/src/app/results/[id]/page.tsx | Created | Yes |
+| frontend/src/app/history/page.tsx | Created | Yes |
+| frontend/src/app/api/queries/route.ts | Created | Yes |
+| frontend/src/app/api/queries/[id]/route.ts | Created | Yes |
+| frontend/src/app/api/candidates/[uuid]/evidence/route.ts | Created | Yes |
+| frontend/src/app/api/feedback/tasks/[taskId]/outcomes/route.ts | Created | Yes |
+| frontend/src/components/Header.tsx | Created | Yes |
+| frontend/src/components/LoadingSpinner.tsx | Created | Yes |
+| frontend/src/components/ErrorAlert.tsx | Created | Yes |
+| frontend/src/components/query/QueryForm.tsx | Created | Yes |
+| frontend/src/components/query/PopulationSelector.tsx | Created | Yes |
+| frontend/src/components/query/KSlider.tsx | Created | Yes |
+| frontend/src/components/query/MeshTagInput.tsx | Created | Yes |
+| frontend/src/components/results/CandidateRow.tsx | Created | Yes |
+| frontend/src/components/results/ScoreBreakdownChart.tsx | Created | Yes |
+| frontend/src/components/results/ArtifactChip.tsx | Created | Yes |
+| frontend/src/components/results/VarianceBand.tsx | Created | Yes |
+| frontend/src/components/results/IntegrityBadge.tsx | Created | Yes |
+| frontend/src/components/results/EvidenceTrailPanel.tsx | Created | Yes |
+| frontend/src/components/results/FeedbackModal.tsx | Created | Yes |
+| frontend/src/components/history/QueryTable.tsx | Created | Yes |
+
 > **EXECUTION DIRECTIVE**: This is a team-orchestrated plan.
 > **FORBIDDEN**: Direct implementation (Edit, Write, NotebookEdit) by the main agent. If you are the main conversation agent and a user asks you to implement this plan, you MUST invoke `/build specs/aegis-phase4a-frontend.md` -- do NOT implement it yourself.
 > **REQUIRED**: Execute ONLY via the `/build` command, which deploys team agents to do the work.
