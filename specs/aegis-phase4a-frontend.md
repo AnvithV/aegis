@@ -66,6 +66,8 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
 - `frontend/postcss.config.mjs` -- PostCSS configuration for Tailwind
 - `frontend/.env.local.example` -- Example environment variables (AEGIS_API_URL, AEGIS_API_TOKEN)
 - `frontend/.gitignore` -- Git ignore for node_modules, .next, etc.
+- `frontend/vercel.json` -- Vercel deployment configuration (framework, build/dev/install commands)
+- `frontend/.env.production.example` -- Production env var documentation for Vercel dashboard
 
 #### Types
 - `frontend/src/types/api.ts` -- TypeScript types for all API request/response shapes
@@ -272,7 +274,84 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 2. TypeScript Types and API Client Layer
+### 2. Vercel Deployment Configuration
+
+- **Task ID**: setup-vercel-deployment
+- **Role**: builder
+- **Depends On**: bootstrap-nextjs
+- **Assigned To**: builder-1
+- **Description**: |
+    Configure the frontend for deployment on Vercel. This runs in parallel with the types-and-api-client task and can be completed quickly.
+
+    ## What to do
+
+    1. Create `frontend/vercel.json` with the following content:
+       ```json
+       {
+         "framework": "nextjs",
+         "buildCommand": "npm run build",
+         "devCommand": "npm run dev",
+         "installCommand": "npm install",
+         "outputDirectory": ".next"
+       }
+       ```
+       This file tells Vercel the framework and commands to use. When deploying from the monorepo, set **Root Directory** to `frontend` in the Vercel project settings (not via this file).
+
+    2. Create `frontend/.env.production.example` documenting all required environment variables for the Vercel dashboard:
+       ```
+       # ── Vercel Environment Variables ──────────────────────────────────────────────
+       # Set these in the Vercel dashboard under Project → Settings → Environment Variables.
+       # All variables are server-only. None are exposed to the browser.
+
+       # Base URL of the Aegis backend API (no trailing slash).
+       # Example: https://api.aegis.internal or http://your-backend-host:8000
+       AEGIS_API_URL=https://your-backend-host
+
+       # JWT token used to authenticate all backend API requests.
+       # Generate with: python -m aegis.api.auth generate-token
+       # Scope: set for Production, Preview, and Development as appropriate.
+       AEGIS_API_TOKEN=your-jwt-token-here
+       ```
+
+    3. Verify `frontend/.gitignore` (created by create-next-app) contains `.env.local` and does NOT ignore `.env.local.example` or `.env.production.example`. If `.env*.example` is gitignored, remove that rule. The example files should be committed.
+
+    4. Verify `frontend/next.config.ts` does NOT set `output: "standalone"` or `output: "export"`. Vercel handles Next.js builds natively — no output mode override is needed. If either is present, remove it. The file should look like:
+       ```typescript
+       import type { NextConfig } from "next";
+
+       const nextConfig: NextConfig = {
+         // No output override needed for Vercel — it handles Next.js natively.
+       };
+
+       export default nextConfig;
+       ```
+
+    5. Verify the build still passes:
+       ```bash
+       cd /Users/anvith/aegis/frontend && npm run build
+       ```
+
+    ## Files to create
+    - `frontend/vercel.json`
+    - `frontend/.env.production.example`
+
+    ## Files to modify
+    - `frontend/.gitignore` -- ensure .env*.example files are NOT gitignored
+    - `frontend/next.config.ts` -- remove output override if present
+
+    ## Acceptance criteria
+    - `frontend/vercel.json` exists with framework, buildCommand, devCommand, installCommand, outputDirectory
+    - `frontend/.env.production.example` exists and documents AEGIS_API_URL and AEGIS_API_TOKEN
+    - `frontend/next.config.ts` does NOT contain `output: "standalone"` or `output: "export"`
+    - `.env.production.example` and `.env.local.example` are NOT gitignored
+    - `npm run build` still passes
+
+    ## Validation command
+    ```bash
+    cd /Users/anvith/aegis/frontend && test -f vercel.json && echo "vercel.json: OK" && test -f .env.production.example && echo ".env.production.example: OK" && ! grep -q 'output.*standalone\|output.*export' next.config.ts && echo "next.config.ts: OK" && npm run build && echo "build: OK"
+    ```
+
+### 3. TypeScript Types and API Client Layer
 
 - **Task ID**: types-and-api-client
 - **Role**: builder
@@ -621,7 +700,7 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 3. Shared Layout and Reusable Components
+### 4. Shared Layout and Reusable Components
 
 - **Task ID**: shared-components
 - **Role**: builder
@@ -812,7 +891,7 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 4. Screen 1 -- New Query Form
+### 5. Screen 1 -- New Query Form
 
 - **Task ID**: screen-new-query
 - **Role**: builder
@@ -1214,7 +1293,7 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 5. Screen 2 -- Results Page Components
+### 6. Screen 2 -- Results Page Components
 
 - **Task ID**: screen-results-components
 - **Role**: builder
@@ -1680,7 +1759,7 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 6. Screen 2 -- Results Page and Candidate Row
+### 7. Screen 2 -- Results Page and Candidate Row
 
 - **Task ID**: screen-results-page
 - **Role**: builder
@@ -1930,7 +2009,7 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 7. Screen 3 -- Query History Page
+### 8. Screen 3 -- Query History Page
 
 - **Task ID**: screen-query-history
 - **Role**: builder
@@ -2156,11 +2235,11 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     cd /Users/anvith/aegis/frontend && npm run build && npm run lint
     ```
 
-### 8. Final Validation
+### 9. Final Validation
 
 - **Task ID**: validate-all
 - **Role**: validator
-- **Depends On**: screen-new-query, screen-results-page, screen-query-history
+- **Depends On**: screen-new-query, screen-results-page, screen-query-history, setup-vercel-deployment
 - **Assigned To**: validator
 - **Description**: |
     Run all validation commands and verify all acceptance criteria across the entire frontend application.
@@ -2204,15 +2283,22 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
        cd /Users/anvith/aegis/frontend && grep -q 'AEGIS_API_URL' .env.local.example && grep -q 'AEGIS_API_TOKEN' .env.local.example && echo "env vars: OK" || echo "env vars: MISSING"
        ```
 
-    8. Run the full build:
+    8. Verify Vercel deployment configuration:
+       ```bash
+       cd /Users/anvith/aegis/frontend && test -f vercel.json && echo "vercel.json: OK" || echo "vercel.json: MISSING"
+       test -f .env.production.example && echo ".env.production.example: OK" || echo ".env.production.example: MISSING"
+       ! grep -q 'output.*standalone\|output.*export' next.config.ts && echo "next.config.ts output mode: OK" || echo "next.config.ts has invalid output override"
+       ```
+
+    9. Run the full build:
        ```bash
        cd /Users/anvith/aegis/frontend && npm run build
        ```
 
-    9. Run linting:
-       ```bash
-       cd /Users/anvith/aegis/frontend && npm run lint
-       ```
+    10. Run linting:
+        ```bash
+        cd /Users/anvith/aegis/frontend && npm run lint
+        ```
 
     If any validation step fails, create a fix task describing what went wrong and what needs to change.
 
@@ -2223,6 +2309,9 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
     - `npm run build` succeeds without errors
     - `npm run lint` succeeds without errors
     - TypeScript strict mode is enabled
+    - `frontend/vercel.json` exists with framework, buildCommand, devCommand, installCommand, outputDirectory
+    - `frontend/.env.production.example` exists and documents AEGIS_API_URL and AEGIS_API_TOKEN for the Vercel dashboard
+    - `frontend/next.config.ts` does NOT set `output: "standalone"` or `output: "export"`
     - Tailwind CSS is configured
     - Recharts is installed as a dependency
     - `.env.local.example` has AEGIS_API_URL and AEGIS_API_TOKEN
@@ -2256,6 +2345,9 @@ Aegis Phases 0-3 built the complete backend: scoring engine, integrity checks, m
 - All screens have loading states, error states, and empty states
 - JWT tokens are never exposed to client-side code (no localStorage, no cookies with token values)
 - Header navigation links work for "New Query" and "Query History"
+- `frontend/vercel.json` exists with correct Vercel deployment configuration
+- `frontend/.env.production.example` documents AEGIS_API_URL and AEGIS_API_TOKEN for the Vercel dashboard
+- `frontend/next.config.ts` does NOT set `output: "standalone"` or `output: "export"`
 
 ## Validation Commands
 
@@ -2268,6 +2360,8 @@ Execute these commands to validate the task is complete:
 - `ls /Users/anvith/aegis/frontend/src/middleware.ts` -- Verify middleware exists
 - `ls /Users/anvith/aegis/frontend/src/app/page.tsx /Users/anvith/aegis/frontend/src/app/results/\[id\]/page.tsx /Users/anvith/aegis/frontend/src/app/history/page.tsx` -- Verify all 3 page routes exist
 - `ls /Users/anvith/aegis/frontend/src/app/api/queries/route.ts /Users/anvith/aegis/frontend/src/app/api/queries/\[id\]/route.ts` -- Verify API proxy routes exist
+- `test -f /Users/anvith/aegis/frontend/vercel.json && echo "vercel.json: OK"` -- Verify Vercel config exists
+- `test -f /Users/anvith/aegis/frontend/.env.production.example && echo ".env.production.example: OK"` -- Verify production env docs exist
 
 ## Notes
 
@@ -2278,3 +2372,4 @@ Execute these commands to validate the task is complete:
 - Recharts is the only visualization library. It is used for the score component breakdown bar chart in the Results screen.
 - The app uses `npx create-next-app@latest` which will install using npm. Ensure Node.js 18+ is available.
 - If `create-next-app` prompts for options interactively, the builder should select: TypeScript (Yes), ESLint (Yes), Tailwind CSS (Yes), `src/` directory (Yes), App Router (Yes), Turbopack (No), import alias `@/*`.
+- **Vercel deployment**: In the Vercel dashboard, set the **Root Directory** to `frontend`. The two required env vars are `AEGIS_API_URL` (your backend host) and `AEGIS_API_TOKEN` (a JWT token). Both are server-only and never sent to the browser. Do NOT set `output: "standalone"` in `next.config.ts` — Vercel builds Next.js natively.
