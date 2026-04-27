@@ -15,9 +15,20 @@ from prometheus_client import (
 
 # Per-source SLO thresholds in seconds
 SOURCE_SLOS: dict[str, float] = {
-    "pubmed": 24 * 3600,      # 24 hours
-    "reporter": 48 * 3600,    # 48 hours
-    "ctgov": 24 * 3600,       # 24 hours
+    "biorxiv": 24 * 3600,           # 24 hours (daily ingestion)
+    "ctgov": 24 * 3600,             # 24 hours
+    "medrxiv": 24 * 3600,           # 24 hours (daily ingestion)
+    "ofac": 6 * 3600,               # 6 hours (event-driven SLO)
+    "ori": 6 * 3600,                # 6 hours (event-driven SLO)
+    "pubmed": 24 * 3600,            # 24 hours
+    "reporter": 48 * 3600,          # 48 hours
+    "retraction_watch": 6 * 3600,   # 6 hours (event-driven SLO)
+    "sam": 6 * 3600,                # 6 hours (event-driven SLO)
+    "state_board_CA": 6 * 3600,     # 6 hours (event-driven SLO)
+    "state_board_FL": 6 * 3600,     # 6 hours
+    "state_board_NY": 6 * 3600,     # 6 hours
+    "state_board_PA": 6 * 3600,     # 6 hours
+    "state_board_TX": 6 * 3600,     # 6 hours
 }
 
 

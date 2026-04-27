@@ -47,7 +47,9 @@ def test_has_recent_finding_outside_window() -> None:
     store = ORIStore()
     store.add_batch([_make_finding("Jane Doe", finding_date=date(2010, 1, 1))])
 
-    assert store.has_recent_finding("Jane Doe", years=10, as_of=date(2026, 1, 1)) is False
+    assert (
+        store.has_recent_finding("Jane Doe", years=10, as_of=date(2026, 1, 1)) is False
+    )
 
 
 def test_has_recent_finding_custom_window() -> None:
@@ -55,7 +57,9 @@ def test_has_recent_finding_custom_window() -> None:
     store.add_batch([_make_finding("Jane Doe", finding_date=date(2022, 1, 1))])
 
     # 3-year window from 2026 -> cutoff 2023, finding in 2022 is outside
-    assert store.has_recent_finding("Jane Doe", years=3, as_of=date(2026, 1, 1)) is False
+    assert (
+        store.has_recent_finding("Jane Doe", years=3, as_of=date(2026, 1, 1)) is False
+    )
     # 5-year window from 2026 -> cutoff 2021, finding in 2022 is inside
     assert store.has_recent_finding("Jane Doe", years=5, as_of=date(2026, 1, 1)) is True
 

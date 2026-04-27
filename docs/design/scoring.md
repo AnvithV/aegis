@@ -1,7 +1,7 @@
 # Design: Scoring, Integrity, and Ranking
 
-> **Last Updated:** 2026-04-26
-> **Updated By:** design-updater (build: specs/aegis-phase1d-observability-performance.md)
+> **Last Updated:** 2026-04-27
+> **Updated By:** design-updater (build: specs/aegis-phase3d-geographic-broadening.md)
 > **Code Baseline:** pre-commit (no commits yet)
 
 ## Current Design
@@ -11,6 +11,8 @@
 The scoring and ranking domain produces a fully ranked list of research candidates for a specialty query, with a human-in-the-loop learning cycle that refines ranking exponents over time. The pipeline has four stages: (1) a query-independent quality prior Q(c) computed from six F-score dimensions, (2) an integrity gate I(c) that either hard-zeros a candidate or applies multiplicative soft discounts (with contestability overrides), (3) query-dependent topical-fit T(c,q) and recency R(c,q) scores, and (4) an end-to-end ranker that composes these into `Rank(c,q) = I(c) * Q(c)^alpha * T(c,q)^beta * R(c,q)^gamma`.
 
 Phase 1c adds three new subsystems: (a) an **audit harness** (`src/aegis/audit/`) that collects pairwise expert judgments with active-learning pair sampling and JSONL persistence, (b) a **learning pipeline** (`src/aegis/learning/`) that fits Plackett-Luce exponents from those judgments using scipy L-BFGS-B, with a refit scheduler and cold-start guard, and (c) **robustness modules** for score-variance estimation via bootstrap resampling (`src/aegis/scoring/variance.py`), score-collapse detection with MeSH expansion fallback (`src/aegis/scoring/score_collapse.py`), specialty-ambiguity flagging (`src/aegis/scoring/specialty_flag.py`), and integrity false-positive contestability (`src/aegis/integrity/contestability.py`).
+
+Phase 3d adds **geographic broadening** to reduce US-centricity in candidate ranking. Seven new typed source clients (WIPO, ERC, Horizon Europe, MRC, CIHR, JST/KAKEN, NSFC) ingest non-US patent and grant data via the shared `NonUsGrantRecord` model (`src/aegis/sources/non_us_grants.py`). The EPO client is extended with full member-state coverage across all 39 EPO states. A `Region` enum and `country_to_region()` utility derive geographic region from ROR-normalized affiliations. Per-region coverage diagnostics (`src/aegis/observability/regional_coverage.py`) compute region-level breakdowns with a 75% bias threshold that triggers API response caveats. Geographic-coverage tracking (`src/aegis/observability/geographic_tracking.py`) records per-region ratios over time via JSONL snapshots with trend analysis and regression alerting against a 40% non-US target. The KAKEN client supports Japanese name transliteration via `cutlet`, and the NSFC client marks all records with a coverage caveat for transparency. The ROR curated dataset is expanded to 102 entries covering JP, CN, GB, CA, EU, and AU institutions. A DuckDB migration (`004_grant_refs.sql`) adds the `grant_refs` table for non-US grant references.
 
 Phase 1d adds **observability, performance, and caching infrastructure** without changing the core scoring pipeline. Five new observability modules track score distributions with KS anomaly detection (`src/aegis/observability/score_dist.py`), integrity-gate hit rates with spike alerting (`src/aegis/observability/integrity_dashboard.py`), apex-list recall regression (`src/aegis/observability/apex_recall.py`), pairwise audit consistency via Cohen's kappa (`src/aegis/observability/audit_consistency.py`), and weight stability across refit cycles (`src/aegis/observability/weight_stability.py`). On the performance side, a new **scheduling package** (`src/aegis/scheduling/`) provides idempotent batch score recomputation with artifact-set hashing (`src/aegis/scheduling/recompute.py`), and a **score cache** (`src/aegis/scoring/cache.py`) with a pluggable `CacheBackend` Protocol (SQLite default) accelerates repeated lookups. A latency budget enforces p95 < 500ms for top-50 ranked output (`tests/perf/test_query_latency.py`). Ops artifacts under `ops/aegis/` provide Prometheus-compatible alert rules and HTML dashboard templates.
 
@@ -199,6 +201,17 @@ graph TD
 | `ops/aegis/api_alerts.yaml` | Prometheus alert rules: API error rate, rate limiting, schema breaks, high latency |
 | `ops/aegis/drift_alerts.yaml` | Prometheus alert rules: ingestion count drop >30%, z-score anomaly |
 | `ops/aegis/weight_review.md` | Weight change approval workflow: manual review when any parameter shifts >25% |
+| `src/aegis/sources/non_us_grants.py` | Shared NonUsGrantRecord model, Region enum, country_to_region() and candidate_region() utilities |
+| `src/aegis/sources/wipo.py` | WIPO PATENTSCOPE client for PCT international patent applications |
+| `src/aegis/sources/erc.py` | ERC grant client via CORDIS API |
+| `src/aegis/sources/horizon_europe.py` | Horizon Europe grant client via CORDIS API |
+| `src/aegis/sources/mrc.py` | MRC (UK) grant client via Gateway to Research API |
+| `src/aegis/sources/cihr.py` | CIHR (Canada) grant client |
+| `src/aegis/sources/jst_kaken.py` | JST/KAKEN (Japan) grant client with cutlet transliteration |
+| `src/aegis/sources/nsfc.py` | NSFC (China) grant client with best-effort coverage caveat |
+| `src/aegis/observability/regional_coverage.py` | Per-region coverage diagnostics with 75% bias threshold and API caveat |
+| `src/aegis/observability/geographic_tracking.py` | Geographic-coverage tracking over time via JSONL snapshots with trend analysis |
+| `src/aegis/storage/migrations/004_grant_refs.sql` | DuckDB migration for non-US grant references table |
 
 ### Patterns
 
@@ -583,3 +596,84 @@ Established patterns builders MUST follow in this domain:
 - **Tradeoffs Accepted**: Cohen's kappa is designed for exactly two raters. When more than two reviewers judge the same pair, the implementation takes only the first two (sorted by reviewer ID, line 141-154). This is acceptable for Phase 1 where overlapping pairs are expected to have at most 2-3 reviewers.
 - **Code Evidence**: `src/aegis/observability/audit_consistency.py:102-129` -- `compute_kappa()` with `p_o`, `p_e`, and edge case handling; `src/aegis/observability/audit_consistency.py:45` -- `low_agreement_threshold = 0.6`; `src/aegis/observability/audit_consistency.py:47-54` -- `should_reshow()` at 5% rate for intra-reviewer consistency.
 - **Build**: `specs/aegis-phase1d-observability-performance.md`
+
+### 2026-04-27 -- NonUsGrantRecord as Shared Model vs Per-Source Models
+
+- **Context**: Phase 3d introduces seven new non-US grant source clients (ERC, Horizon Europe, MRC, CIHR, JST/KAKEN, NSFC, plus WIPO for patents). Each source returns grant data with different field names and structures. The system needs a common model for downstream processing (storage, scoring, diagnostics).
+- **Options Considered**:
+  - Per-source models: each client defines its own grant model (e.g., `ErcGrant`, `MrcGrant`). Type-safe but creates seven parallel models with duplicated fields, and every downstream consumer must handle all types.
+  - **Chosen**: Shared `NonUsGrantRecord` model in `src/aegis/sources/non_us_grants.py` with a `source` field (e.g., "erc", "mrc", "kaken") to distinguish origin. Each client's `_parse_*` method converts raw API data into the shared model with appropriate `funder`, `funder_country`, `currency`, and `coverage_caveat` values.
+- **Rationale**: A shared model minimizes downstream coupling. The `grant_refs` DuckDB table, regional coverage diagnostics, and geographic tracking all operate on `NonUsGrantRecord` without switch logic. The `coverage_caveat` field (None for full-coverage sources, descriptive string for NSFC) provides transparent quality signaling without requiring per-source handling. The `raw_json` field preserves the original API response for source-specific debugging.
+- **Tradeoffs Accepted**: Source-specific fields (e.g., KAKEN researcher numbers, ERC programme parts) are not modeled in `NonUsGrantRecord`. These are accessible via `raw_json` or via source-specific models (e.g., `KakenResearcher`).
+- **Code Evidence**: `src/aegis/sources/non_us_grants.py:69-88` -- `NonUsGrantRecord` with 18 fields including `source`, `coverage_caveat`, `raw_json`; `src/aegis/sources/erc.py:106` -- `_parse_cordis_project()` returns `NonUsGrantRecord(funder="ERC", source="erc")`; `src/aegis/sources/nsfc.py:113` -- `_parse_nsfc_grant()` always sets `coverage_caveat=NSFC_COVERAGE_CAVEAT`.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- Region Derivation from ROR Affiliation vs Grant Funder Country
+
+- **Context**: The system needs to assign a geographic region to each candidate for per-region coverage diagnostics. Two natural sources exist: the funder country of the candidate's grants, and the country from the candidate's institutional affiliation (already stored via `RorResolver`).
+- **Options Considered**:
+  - Grant funder country: derive region from the funding agency's country. A researcher funded by ERC would be classified as EU. However, researchers often hold grants from countries other than where they work (e.g., a US-based researcher with an ERC grant from their previous EU appointment).
+  - **Chosen**: ROR-normalized affiliation country: `candidate_region()` in `src/aegis/sources/non_us_grants.py` uses the most recent `AffiliationSpan.country` field from the candidate's affiliation history. This reflects where the researcher actually works, not where their funding originates.
+- **Rationale**: Affiliation-based region assignment is more stable and accurately reflects the researcher's institutional location. The `RorResolver` already stores country codes in both curated data and the `affiliation_history` table. Using the most recent affiliation (by `end_date`) handles career moves correctly. The `COUNTRY_TO_REGION` mapping covers US, 27 EU member states, UK, Canada, Japan, China, with everything else as REST_OF_WORLD.
+- **Tradeoffs Accepted**: Candidates without resolved affiliations default to REST_OF_WORLD, which may undercount known regions. Multi-institutional researchers use only their most recent affiliation, losing nuance about researchers who split time between institutions in different regions.
+- **Code Evidence**: `src/aegis/sources/non_us_grants.py:52-62` -- `candidate_region()` using most recent `AffiliationSpan`; `src/aegis/sources/non_us_grants.py:32-42` -- `COUNTRY_TO_REGION` mapping with 27 EU states; `src/aegis/sources/non_us_grants.py:45-50` -- `country_to_region()` with REST_OF_WORLD default.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- NSFC Best-Effort Pattern with Coverage Caveat Field
+
+- **Context**: NSFC (China) grant data is partially restricted. Unlike ERC or MRC where public APIs provide comprehensive data, NSFC's publicly accessible records represent an unknown fraction of total funded projects. The system needs to surface this data quality limitation transparently.
+- **Options Considered**:
+  - Exclude NSFC entirely: avoids data quality issues but creates a blind spot for Chinese-funded researchers, worsening geographic bias.
+  - Include NSFC without caveat: ingests available data but silently presents incomplete coverage as complete.
+  - **Chosen**: Include NSFC with an explicit `coverage_caveat` on every record. The `NSFC_COVERAGE_CAVEAT` constant string is set on all `NonUsGrantRecord` instances from `NsfcClient._parse_nsfc_grant()`. Downstream diagnostics (`RegionalCoverageDashboard`) surface this caveat in the `coverage_caveats` list.
+- **Rationale**: Including best-effort data with transparent caveats is better than either exclusion (biased) or silent inclusion (misleading). The `coverage_caveat` field on `NonUsGrantRecord` is None for full-coverage sources and a descriptive string for NSFC. The `RegionalCoverageDashboard.compute()` checks for Chinese-region candidates and includes an NSFC-specific caveat in the output. The default batch_size for NSFC is lower (50 vs 100) due to rate constraints.
+- **Tradeoffs Accepted**: The caveat is static text, not a quantitative coverage estimate. Future work could estimate actual coverage fraction by comparing against known Chinese researcher counts from PubMed.
+- **Code Evidence**: `src/aegis/sources/nsfc.py:24-27` -- `NSFC_COVERAGE_CAVEAT` constant; `src/aegis/sources/nsfc.py:113` -- `coverage_caveat=NSFC_COVERAGE_CAVEAT` on every record; `src/aegis/observability/regional_coverage.py:131-134` -- NSFC caveat in coverage_caveats list.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- KAKEN Transliteration via cutlet with Graceful Fallback
+
+- **Context**: KAKEN grant data includes Japanese researcher names in native script (kanji/kana). For identity resolution via the Fellegi-Sunter linker, these names must be romanized. The transliteration must handle edge cases (non-Japanese text, missing cutlet dictionary) gracefully.
+- **Options Considered**:
+  - Require romanized names only: skip non-romanized entries. Simple but loses coverage for researchers whose KAKEN profiles lack English names.
+  - External transliteration service: adds network dependency and latency.
+  - **Chosen**: Local transliteration via the `cutlet` library (Hepburn romanization) with try/except fallback. `transliterate_japanese_name()` in `src/aegis/sources/jst_kaken.py` imports cutlet inside the function to avoid import errors if not installed, and returns the original string on any failure.
+- **Rationale**: cutlet provides high-quality Hepburn romanization using the MeCab morphological analyzer. Importing inside the function isolates the dependency. The fallback-to-original behavior ensures the pipeline never crashes on transliteration failure; the worst case is an un-romanized name variant stored alongside other name forms. `build_name_variants()` collects all non-None name forms (name_ja, name_en, name_kana, name_romaji) into a deduplicated list for `Candidate.name_variants`.
+- **Tradeoffs Accepted**: cutlet requires a one-time dictionary download on first use, which may be unreliable in CI. Tests mock or test with simple katakana input that does not require the full dictionary. The `str()` cast on the cutlet result ensures mypy strict compliance since cutlet is untyped.
+- **Code Evidence**: `src/aegis/sources/jst_kaken.py:42-50` -- `transliterate_japanese_name()` with try/except; `src/aegis/sources/jst_kaken.py:53-66` -- `build_name_variants()` deduplication; `src/aegis/sources/jst_kaken.py:48` -- `str(katsu.romaji(name_ja))` for type safety.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- Regional Caveat Threshold at 75%
+
+- **Context**: The per-region coverage diagnostics need to detect and communicate geographic bias in query results. A threshold determines when results are considered biased enough to warrant a caveat in API responses.
+- **Options Considered**:
+  - 50% threshold: triggers caveat when any region has a simple majority. Too sensitive -- a US-heavy cohort of 55% US would trigger, which may not indicate meaningful bias.
+  - 90% threshold: only triggers for extreme monoculture. Too lenient -- 80% from one region is clearly biased.
+  - **Chosen**: 75% threshold (`REGIONAL_CAVEAT_THRESHOLD = 75.0` in `src/aegis/observability/regional_coverage.py`). Results with >75% from any single region are flagged as `is_geographically_biased=True` and a `regional_caveat` string is generated for API responses.
+- **Rationale**: The 75% threshold balances sensitivity with specificity. It corresponds to a 3:1 ratio between the dominant region and all others combined, which represents meaningful bias. The caveat text from `build_regional_caveat()` includes the dominant region name and exact percentage, giving customers actionable information. The non-US ratio target (40%) is tracked separately by `GeographicTracker` for internal monitoring.
+- **Tradeoffs Accepted**: The threshold is a single global constant, not per-population or per-query. Certain populations (e.g., Japan-specific oncology) may legitimately have >75% from one region. The caveat is informational rather than restrictive -- results are still returned.
+- **Code Evidence**: `src/aegis/observability/regional_coverage.py:17` -- `REGIONAL_CAVEAT_THRESHOLD = 75.0`; `src/aegis/observability/regional_coverage.py:36-41` -- `build_regional_caveat()` format; `src/aegis/observability/regional_coverage.py:109-112` -- bias detection in `compute()`.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- Geographic Tracking via JSONL Snapshots
+
+- **Context**: Per-region coverage ratios need to be tracked over time to monitor progress toward the 40% non-US target as new sources come online. The tracking needs persistence, trend computation, and regression alerting.
+- **Options Considered**:
+  - DuckDB time-series table: consistent with observability patterns from Phase 1d. However, geographic snapshots are low-volume (one per ingest cycle) and the trend computation is simple (last 4 snapshots).
+  - Prometheus counters: good for real-time monitoring but not for historical trend analysis.
+  - **Chosen**: JSONL file persistence via `GeographicTracker` in `src/aegis/observability/geographic_tracking.py`. Each `GeographicSnapshot` is serialized as one JSON line and appended. Trend computation loads all snapshots and analyzes the last 4 for direction (improving/stable/regressing). Regression alerting triggers when the non-US ratio drops >5% between consecutive snapshots.
+- **Rationale**: JSONL is the simplest persistence mechanism for low-volume time-series data that needs historical analysis. The pattern is consistent with the JSONL approach used for audit judgments and contestability overrides. Prometheus metrics are also generated via `generate_prometheus_metrics()` for real-time dashboards, providing both historical and live monitoring. The "improving/stable/regressing" trend classification is simple and actionable.
+- **Tradeoffs Accepted**: JSONL does not support efficient historical queries or aggregation. A future phase may migrate to DuckDB for richer time-series analysis (e.g., week-over-week comparisons, rolling averages). The 5% regression alert threshold is a fixed constant.
+- **Code Evidence**: `src/aegis/observability/geographic_tracking.py:16` -- `NON_US_TARGET_RATIO = 0.40`; `src/aegis/observability/geographic_tracking.py:55-64` -- `record_snapshot()` JSONL append; `src/aegis/observability/geographic_tracking.py:73-103` -- `compute_trend()` with improving/regressing/stable logic; `src/aegis/observability/geographic_tracking.py:96-98` -- regression alert on >5% drop.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`
+
+### 2026-04-27 -- grant_refs Table (Migration 004) for Non-US Grant References
+
+- **Context**: Non-US grants need to be linked to candidates in the DuckDB storage layer, following the pattern established by `patent_refs` (migration 003) for patent-candidate associations.
+- **Options Considered**:
+  - Extend the existing `ArtifactRefBundle.grant_ids` list: already used for NIH grants. Adding non-US grant IDs here would lose the distinction between NIH and non-US grants, making source-level diagnostics harder.
+  - **Chosen**: New `grant_refs` table via migration `004_grant_refs.sql` with columns `grant_reference`, `candidate_uuid`, `source`, and `funder_country`. The `source` column distinguishes between funders (erc, horizon_europe, mrc, cihr, kaken, nsfc). Three indexes on `candidate_uuid`, `source`, and `funder_country` support efficient queries.
+- **Rationale**: A dedicated table maintains the separation between US grants (in `ArtifactRefBundle.grant_ids` linked to RePORTER) and non-US grants. The `source` column enables per-funder queries without joining to the full grant record. The `funder_country` index supports regional coverage diagnostics that need to count grants per country. The table structure mirrors `patent_refs` for consistency.
+- **Tradeoffs Accepted**: Non-US grants are not yet stored in `ArtifactRefBundle.grant_ids`, which means the existing per-source coverage percentages in `CoverageDiagnostics` do not count non-US grants. This is addressed by the separate `RegionalCoverageDashboard` which operates at the region level.
+- **Code Evidence**: `src/aegis/storage/migrations/004_grant_refs.sql:1-10` -- CREATE TABLE with 4 columns and 3 indexes; `src/aegis/storage/migrations/003_patent_refs.sql` -- reference pattern.
+- **Build**: `specs/aegis-phase3d-geographic-broadening.md`

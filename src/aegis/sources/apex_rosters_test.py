@@ -63,9 +63,13 @@ def test_lookup_with_institution_disambiguation() -> None:
 
 def test_list_by_roster() -> None:
     store = ApexRosterStore()
-    store.add(_make_membership("Alice Smith", roster_type=ApexRosterType.hhmi_investigator))
+    store.add(
+        _make_membership("Alice Smith", roster_type=ApexRosterType.hhmi_investigator)
+    )
     store.add(_make_membership("Bob Jones", roster_type=ApexRosterType.nas_member))
-    store.add(_make_membership("Carol Lee", roster_type=ApexRosterType.hhmi_investigator))
+    store.add(
+        _make_membership("Carol Lee", roster_type=ApexRosterType.hhmi_investigator)
+    )
 
     hhmi = store.list_by_roster(ApexRosterType.hhmi_investigator)
     assert len(hhmi) == 2

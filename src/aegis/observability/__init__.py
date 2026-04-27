@@ -12,6 +12,10 @@ from aegis.observability.audit_consistency import (
     ConsistencyReport,
     JudgmentRecord,
 )
+from aegis.observability.clinician_coverage import (
+    ClinicianCoverageDashboard,
+    ClinicianCoverageMetrics,
+)
 from aegis.observability.coverage import CoverageDiagnostics, CoverageMetrics
 from aegis.observability.drift import DriftAlert, DriftConfig, DriftDetector
 from aegis.observability.freshness import FreshnessMetrics
@@ -26,10 +30,36 @@ from aegis.observability.linkage_report import (
     LinkageReporter,
     LinkageThresholds,
 )
+from aegis.observability.merge_accuracy import (
+    MergeAccuracyMetrics,
+    MergeAccuracyTracker,
+)
+from aegis.observability.reassignment_metrics import (
+    ReassignmentAlert,
+    ReassignmentMetrics,
+    ReassignmentRateMetrics,
+)
 from aegis.observability.score_dist import (
     DistributionSnapshot,
     KSAlert,
     ScoreDistributionMonitor,
+)
+from aegis.observability.signal_balance import (
+    CohortSignalBalance,
+    SignalBalanceDashboard,
+    SignalBalanceMetrics,
+)
+from aegis.observability.specialty_dist import (
+    SpecialtyDistDashboard,
+    SpecialtyDistMetrics,
+)
+from aegis.observability.weight_drift import (
+    DriftAnnotation,
+    JumpAlert,
+    ParameterTimeSeries,
+    WeightDriftReport,
+    WeightDriftTracker,
+    WeightSnapshot,
 )
 from aegis.observability.weight_stability import (
     StabilityReport,
@@ -42,6 +72,9 @@ __all__ = [
     "ApexQuery",
     "ApexRecallTracker",
     "AuditConsistencyTracker",
+    "ClinicianCoverageDashboard",
+    "ClinicianCoverageMetrics",
+    "CohortSignalBalance",
     "ConfidenceShift",
     "ConsistencyReport",
     "CoverageDiagnostics",
@@ -49,20 +82,35 @@ __all__ = [
     "DailySummary",
     "DistributionSnapshot",
     "DriftAlert",
+    "DriftAnnotation",
     "DriftConfig",
     "DriftDetector",
     "FreshnessMetrics",
     "IntegrityDashboard",
     "IntegrityEvent",
+    "JumpAlert",
     "JudgmentRecord",
     "KSAlert",
     "LinkageReporter",
     "LinkageThresholds",
+    "MergeAccuracyMetrics",
+    "MergeAccuracyTracker",
+    "ParameterTimeSeries",
+    "ReassignmentAlert",
+    "ReassignmentMetrics",
+    "ReassignmentRateMetrics",
     "RecallResult",
     "ScoreDistributionMonitor",
+    "SignalBalanceDashboard",
+    "SignalBalanceMetrics",
+    "SpecialtyDistDashboard",
+    "SpecialtyDistMetrics",
     "SpikeAlert",
     "StabilityReport",
     "WeeklyTrend",
+    "WeightDriftReport",
+    "WeightDriftTracker",
     "WeightShift",
+    "WeightSnapshot",
     "WeightStabilityTracker",
 ]

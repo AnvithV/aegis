@@ -50,6 +50,7 @@ from aegis.scoring.specialty_reassignment import (
     ReassignmentReport,
     SpecialtyReassigner,
 )
+from aegis.scoring.ambiguity_handling import AmbiguityHandler, DualRankResult
 from aegis.scoring.specialty_flag import (
     SpecialtyAmbiguityFlagger,
     SpecialtyFlagResult,
@@ -58,6 +59,7 @@ from aegis.scoring.topical_fit import TopicalFit
 from aegis.scoring.variance import Bootstrap, BootstrapInput, ScoreBand
 
 __all__ = [
+    "AmbiguityHandler",
     "ArtifactWeight",
     "Bootstrap",
     "BootstrapInput",
@@ -69,6 +71,7 @@ __all__ = [
     "CollapseResult",
     "ComponentBreakdown",
     "ContributingArtifact",
+    "DualRankResult",
     "F1Computer",
     "F1Score",
     "F2Computer",

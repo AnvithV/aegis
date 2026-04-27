@@ -66,8 +66,12 @@ def test_action_severity_ordering() -> None:
 def test_california_classify_action() -> None:
     """Verify CA action text maps to correct severity."""
     assert CaliforniaMBC.classify_action("Revoked") == ActionSeverity.revocation
-    assert CaliforniaMBC.classify_action("License Suspended") == ActionSeverity.suspension
-    assert CaliforniaMBC.classify_action("Probation ordered") == ActionSeverity.probation
+    assert (
+        CaliforniaMBC.classify_action("License Suspended") == ActionSeverity.suspension
+    )
+    assert (
+        CaliforniaMBC.classify_action("Probation ordered") == ActionSeverity.probation
+    )
     assert (
         CaliforniaMBC.classify_action("Public Reprimand issued")
         == ActionSeverity.public_reprimand
@@ -166,45 +170,77 @@ def test_registry_all_10_states() -> None:
 def test_florida_classify_action() -> None:
     """FL action text maps to correct severity."""
     assert FloridaDOH.classify_action("License Revoked") == ActionSeverity.revocation
-    assert FloridaDOH.classify_action("Voluntary Relinquishment") == ActionSeverity.revocation
-    assert FloridaDOH.classify_action("Suspended for 1 year") == ActionSeverity.suspension
-    assert FloridaDOH.classify_action("Letter of Concern issued") == ActionSeverity.public_reprimand
-    assert FloridaDOH.classify_action("unknown action") == ActionSeverity.public_reprimand
+    assert (
+        FloridaDOH.classify_action("Voluntary Relinquishment")
+        == ActionSeverity.revocation
+    )
+    assert (
+        FloridaDOH.classify_action("Suspended for 1 year") == ActionSeverity.suspension
+    )
+    assert (
+        FloridaDOH.classify_action("Letter of Concern issued")
+        == ActionSeverity.public_reprimand
+    )
+    assert (
+        FloridaDOH.classify_action("unknown action") == ActionSeverity.public_reprimand
+    )
 
 
 def test_pennsylvania_classify_action() -> None:
     """PA action text maps to correct severity."""
     assert PennsylvaniaPSMB.classify_action("Revocation") == ActionSeverity.revocation
     assert PennsylvaniaPSMB.classify_action("Suspended") == ActionSeverity.suspension
-    assert PennsylvaniaPSMB.classify_action("Probation ordered") == ActionSeverity.probation
-    assert PennsylvaniaPSMB.classify_action("Public Reprimand") == ActionSeverity.public_reprimand
+    assert (
+        PennsylvaniaPSMB.classify_action("Probation ordered")
+        == ActionSeverity.probation
+    )
+    assert (
+        PennsylvaniaPSMB.classify_action("Public Reprimand")
+        == ActionSeverity.public_reprimand
+    )
 
 
 def test_illinois_classify_action() -> None:
     """IL action text maps to correct severity."""
     assert IllinoisIDFPR.classify_action("License Revoked") == ActionSeverity.revocation
-    assert IllinoisIDFPR.classify_action("Indefinite Suspension") == ActionSeverity.suspension
-    assert IllinoisIDFPR.classify_action("Formal Complaint") == ActionSeverity.public_reprimand
+    assert (
+        IllinoisIDFPR.classify_action("Indefinite Suspension")
+        == ActionSeverity.suspension
+    )
+    assert (
+        IllinoisIDFPR.classify_action("Formal Complaint")
+        == ActionSeverity.public_reprimand
+    )
 
 
 def test_ohio_classify_action() -> None:
     """OH action text maps to correct severity."""
     assert OhioSMBO.classify_action("Permanent Revocation") == ActionSeverity.revocation
     assert OhioSMBO.classify_action("Probationary license") == ActionSeverity.probation
-    assert OhioSMBO.classify_action("Public Reprimand") == ActionSeverity.public_reprimand
+    assert (
+        OhioSMBO.classify_action("Public Reprimand") == ActionSeverity.public_reprimand
+    )
 
 
 def test_michigan_classify_action() -> None:
     """MI action text maps to correct severity."""
     assert MichiganLARA.classify_action("Revocation") == ActionSeverity.revocation
-    assert MichiganLARA.classify_action("Summary Suspension") == ActionSeverity.suspension
-    assert MichiganLARA.classify_action("Limitation on license") == ActionSeverity.restriction
+    assert (
+        MichiganLARA.classify_action("Summary Suspension") == ActionSeverity.suspension
+    )
+    assert (
+        MichiganLARA.classify_action("Limitation on license")
+        == ActionSeverity.restriction
+    )
 
 
 def test_new_jersey_classify_action() -> None:
     """NJ action text maps to correct severity."""
     assert NewJerseyDCA.classify_action("License Revoked") == ActionSeverity.revocation
-    assert NewJerseyDCA.classify_action("Surrender of license") == ActionSeverity.revocation
+    assert (
+        NewJerseyDCA.classify_action("Surrender of license")
+        == ActionSeverity.revocation
+    )
     assert NewJerseyDCA.classify_action("Censure") == ActionSeverity.public_reprimand
 
 
@@ -212,7 +248,10 @@ def test_massachusetts_classify_action() -> None:
     """MA action text maps to correct severity."""
     assert MassachusettsBORM.classify_action("Revocation") == ActionSeverity.revocation
     assert MassachusettsBORM.classify_action("Suspended") == ActionSeverity.suspension
-    assert MassachusettsBORM.classify_action("Letter of Reprimand") == ActionSeverity.public_reprimand
+    assert (
+        MassachusettsBORM.classify_action("Letter of Reprimand")
+        == ActionSeverity.public_reprimand
+    )
 
 
 def test_board_action_model() -> None:

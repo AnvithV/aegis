@@ -4,6 +4,8 @@ from aegis.identity.contradictions import (
     ContradictionHandler,
     ContradictionRecord,
 )
+from aegis.identity.npi_pubmed_match import NpiPubmedMatch, NpiPubmedMatcher
+from aegis.identity.patent_conflicts import PatentConflict, PatentConflictHandler
 from aegis.identity.cross_population_merge import (
     CrossPopulationMerger,
     MergeCandidate,
@@ -24,9 +26,13 @@ __all__ = [
     "ContradictionHandler",
     "ContradictionRecord",
     "CrossPopulationMerger",
+    "LinkResult",
     "MergeCandidate",
     "MergeResult",
-    "LinkResult",
+    "NpiPubmedMatch",
+    "NpiPubmedMatcher",
+    "PatentConflict",
+    "PatentConflictHandler",
     "ProbabilisticLinker",
     "ReviewDecision",
     "ReviewItem",

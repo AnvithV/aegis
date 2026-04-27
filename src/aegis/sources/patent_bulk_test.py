@@ -6,6 +6,7 @@ import gzip
 import json
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from aegis.sources.epo_bulk import EpoBulkIngestor
 from aegis.sources.uspto import PatentRecord
@@ -18,7 +19,7 @@ def _make_uspto_record(
     patent_number: str,
     grant_date: str = "2023-06-15",
     title: str = "Test Patent",
-) -> dict:
+) -> dict[str, Any]:
     return {
         "patent_number": patent_number,
         "grant_date": grant_date,
@@ -49,7 +50,7 @@ def _make_epo_record(
     doc_number: str,
     publication_date: str = "2023-06-15",
     title: str = "EP Test Patent",
-) -> dict:
+) -> dict[str, Any]:
     return {
         "doc_number": doc_number,
         "publication_date": publication_date,
@@ -68,7 +69,7 @@ def _make_epo_record(
     }
 
 
-def _write_jsonl(path: Path, records: list[dict]) -> None:
+def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     with open(path, "w") as f:
         for rec in records:
             f.write(json.dumps(rec) + "\n")
