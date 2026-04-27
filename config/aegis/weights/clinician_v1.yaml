@@ -1,0 +1,22 @@
+# Clinician specialty weight vector v1
+# Weights sum to 1.0; includes F7 (clinician-specific family) at 0.25
+# F3 (leadership) is high because clinical leadership signals are strong
+version: 1
+specialty: clinician
+created: "2026-04-26"
+weights:
+  f1_rcr: 0.15
+  f2_funding: 0.10
+  f3_leadership: 0.25
+  f4_apex: 0.05
+  f5_translational: 0.15
+  f6_lineage: 0.05
+  f7_clinician: 0.25
+exponents:
+  alpha: 0.7
+  beta: 1.0
+  gamma: 0.4
+exponent_bounds:
+  alpha: [0.3, 1.2]
+  beta: [0.5, 1.5]
+  gamma: [0.1, 0.8]

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coverage Dashboard</title>
+<style>
+body { font-family: sans-serif; margin: 2em; }
+table { border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #ccc; padding: 6px 12px; text-align: left; }
+th { background: #f0f0f0; }
+h1 { color: #333; }
+.bar { display: inline-block; height: 18px; background: #4682b4; }
+</style>
+</head>
+<body>
+<h1>Coverage Diagnostics</h1>
+<p>Generate this report by running <code>CoverageDiagnostics.save_report()</code>.</p>
+<table>
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>Total Candidates</td><td>--</td></tr>
+<tr><td>Strong-Key %</td><td>--</td></tr>
+<tr><td>Probabilistic Linkage %</td><td>--</td></tr>
+<tr><td>Thin-Record %</td><td>--</td></tr>
+<tr><td>Linkage P5</td><td>--</td></tr>
+<tr><td>Linkage P50</td><td>--</td></tr>
+<tr><td>Linkage P95</td><td>--</td></tr>
+</table>
+<h2>Per-Source Coverage</h2>
+<table>
+<tr><th>Source</th><th>Coverage</th></tr>
+<tr><td>pubmed</td><td>--</td></tr>
+<tr><td>reporter</td><td>--</td></tr>
+<tr><td>ctgov</td><td>--</td></tr>
+</table>
+<h2>Linkage Confidence Histogram</h2>
+<p>Histogram placeholder -- rendered at report generation time.</p>
+</body>
+</html>

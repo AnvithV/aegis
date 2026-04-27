@@ -1,0 +1,21 @@
+# Drug-discovery specialty weight vector v1
+# Weights sum to 1.0; F5 (translational impact, including patents) is dominant
+# for this population — medicinal chemists, structural biologists, DMPK/ADMET
+version: 1
+specialty: drug_discovery
+created: "2026-04-26"
+weights:
+  f1_rcr: 0.15
+  f2_funding: 0.05
+  f3_leadership: 0.15
+  f4_apex: 0.05
+  f5_translational: 0.50
+  f6_lineage: 0.10
+exponents:
+  alpha: 0.7
+  beta: 1.0
+  gamma: 0.4
+exponent_bounds:
+  alpha: [0.3, 1.2]
+  beta: [0.5, 1.5]
+  gamma: [0.1, 0.8]

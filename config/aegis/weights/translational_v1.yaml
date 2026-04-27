@@ -1,0 +1,20 @@
+# Translational specialty weight vector v1 (cold-start prior)
+# Weights sum to 1.0; used in geometric-mean composition Q(c) = prod(F_i^w_i)
+version: 1
+specialty: translational
+created: "2026-04-25"
+weights:
+  f1_rcr: 0.35
+  f2_funding: 0.25
+  f3_leadership: 0.20
+  f4_apex: 0.05
+  f5_translational: 0.10
+  f6_lineage: 0.05
+exponents:
+  alpha: 0.7   # Q(c) exponent in Rank formula
+  beta: 1.0    # T(c,q) exponent
+  gamma: 0.4   # R(c,q) exponent
+exponent_bounds:
+  alpha: [0.3, 1.2]
+  beta: [0.5, 1.5]
+  gamma: [0.1, 0.8]

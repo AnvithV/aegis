@@ -1,0 +1,55 @@
+groups:
+  - name: aegis-score-distribution
+    rules:
+      - alert: AegisScoreDistributionShift
+        expr: |
+          aegis_score_distribution_ks_statistic > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Score distribution shift detected for {{ $labels.component }}"
+          description: >-
+            KS statistic for {{ $labels.component }} exceeds 0.1,
+            indicating a statistically significant shift in the score
+            distribution compared to the previous snapshot.
+
+      - alert: AegisIntegrityHitRateSpike
+        expr: |
+          aegis_integrity_daily_count
+          > 3 * aegis_integrity_baseline_mean
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Integrity gate hit-rate spike for {{ $labels.event_type }}/{{ $labels.reason }}"
+          description: >-
+            Daily integrity event count for
+            {{ $labels.event_type }}/{{ $labels.reason }} is more than
+            3x the 14-day rolling baseline mean.
+
+      - alert: AegisApexRecallDrop
+        expr: |
+          aegis_apex_recall_delta < -0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Apex recall dropped >5% for {{ $labels.query_id }}"
+          description: >-
+            Apex recall for query {{ $labels.query_id }} has dropped
+            more than 5% compared to the previous week, indicating a
+            potential regression in expert ranking quality.
+
+      - alert: AegisWeightShiftLarge
+        expr: |
+          aegis_weight_shift_relative_pct > 25.0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Large weight shift detected for {{ $labels.parameter }}"
+          description: >-
+            Weight parameter {{ $labels.parameter }} has shifted more
+            than 25% between versions, requiring manual review before
+            deployment.

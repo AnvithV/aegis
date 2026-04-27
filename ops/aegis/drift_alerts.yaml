@@ -1,0 +1,32 @@
+groups:
+  - name: aegis-ingestion-drift
+    rules:
+      - alert: AegisIngestionDrop
+        expr: |
+          aegis_ingestion_gap_count > 0
+          and
+          (
+            (aegis_ingestion_baseline_mean - aegis_ingestion_current_count)
+            / aegis_ingestion_baseline_mean
+          ) > 0.30
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ingestion drop >30% for {{ $labels.source }}"
+          description: >-
+            Artifact count for {{ $labels.source }} has dropped more
+            than 30% compared to the 14-day rolling baseline.
+
+      - alert: AegisIngestionAnomaly
+        expr: |
+          aegis_ingestion_drift_z_score > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingestion anomaly detected for {{ $labels.source }}"
+          description: >-
+            Z-score for {{ $labels.source }} day-over-day artifact count
+            exceeds 2.0, indicating a statistically significant deviation
+            from the 14-day rolling baseline.

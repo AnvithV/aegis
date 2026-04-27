@@ -1,0 +1,25 @@
+queries:
+  - query_id: nccn-nsclc-panel
+    description: "NCCN NSCLC guidelines panel members"
+    mesh_terms:
+      - "Carcinoma, Non-Small-Cell Lung"
+      - "Practice Guidelines as Topic"
+    expected_uuids: []
+    top_k: 50
+
+  - query_id: nih-merit-nsclc
+    description: "NIH MERIT award holders in NSCLC translational research"
+    mesh_terms:
+      - "Carcinoma, Non-Small-Cell Lung"
+      - "Translational Research, Biomedical"
+      - "National Institutes of Health (U.S.)"
+    expected_uuids: []
+    top_k: 50
+
+  - query_id: asco-yi-nsclc
+    description: "ASCO Young Investigator awardees in NSCLC"
+    mesh_terms:
+      - "Carcinoma, Non-Small-Cell Lung"
+      - "Awards and Prizes"
+    expected_uuids: []
+    top_k: 50
