@@ -1,0 +1,60 @@
+---
+sidebar_position: 1
+title: What is Aegis?
+---
+
+# What is Aegis?
+
+Aegis is an internal researcher-ranking engine built for labeling tasks. Given a specialty query — say, "non-small-cell lung cancer translational research" — Aegis returns a ranked list of the top K candidates, each with a composite score, per-component evidence trail, and integrity flags. The system is designed for internal task managers who need to identify and vet researchers quickly, not as a researcher-facing product.
+
+## The Problem
+
+Healthcare, biomedical research, and drug discovery span millions of active researchers worldwide. They publish papers, file patents, secure grants, lead clinical trials, and hold board certifications — all tracked across dozens of disconnected data sources. When a task manager needs to find the best researchers in a narrow specialty, the challenge is not a lack of data. The challenge is synthesizing that data into a defensible, transparent ranking that accounts for research quality, topical relevance, recency, and professional integrity.
+
+Manual approaches do not scale. Keyword searches across PubMed or patent databases return noisy results without any notion of quality or fit. Existing researcher profiles (Google Scholar, ORCID) are self-reported and incomplete. No single source captures the full picture of a researcher's standing across publications, funding, clinical work, and integrity history.
+
+Aegis solves this by ingesting data from approximately 25 sources, resolving researcher identities across them, and computing a multi-dimensional ranking that balances quality, relevance, recency, and integrity.
+
+## What Aegis Produces
+
+For a given specialty query, Aegis produces:
+
+- **A ranked list of K candidates** ordered by composite score, where K is configurable per query.
+- **Per-candidate scores** broken down by component so that every ranking decision is transparent and auditable.
+- **Evidence trails** linking each score component back to the underlying data: specific publications, grants, patents, clinical trials, or integrity records.
+- **Integrity flags** indicating whether a candidate has been hard-excluded (for reasons such as federal debarment or confirmed research fraud) or received soft scoring discounts (for issues such as retracted co-authorships or predatory journal publications).
+
+## Who Uses Aegis
+
+Aegis serves internal task managers. These are the people responsible for identifying, vetting, and engaging researchers for labeling tasks. Aegis is not researcher-facing — candidates do not interact with the system, view their own scores, or manage profiles. Task managers use Aegis to go from a specialty description to a shortlist of vetted candidates, replacing manual searches and spreadsheet-based tracking.
+
+## How Scoring Works
+
+Every candidate receives a composite score built from four components:
+
+- **Recency (R):** How recent and active is the candidate's work in the queried specialty? A researcher with five papers in the last two years scores higher than one whose last publication was a decade ago.
+- **Quality Prior (Q):** How strong is the candidate's overall research profile, independent of any specific query? This is a composite of six sub-scores (seven for clinicians) covering citation impact, funding track record, leadership roles, apex-list membership, translational output, and academic lineage.
+- **Topical Fit (C):** How closely does the candidate's body of work align with the specific specialty being queried? A researcher who publishes broadly in oncology may score lower on topical fit for a narrow immunotherapy query than a specialist in that exact subfield.
+- **Integrity Gate (I):** Does the candidate pass integrity checks? Hard gates — federal debarment, confirmed fraud, sanctions-list matches — exclude a candidate entirely. Soft discounts — retracted co-authorships, predatory journal publications, paper-mill associations — reduce the score proportionally rather than eliminating the candidate.
+
+These four components combine into a single composite score. The Quality Prior uses a geometric mean of its sub-scores, which naturally penalizes candidates who are strong in one area but weak in others. A well-rounded researcher scores higher than one with a single exceptional metric and several poor ones.
+
+The exponents that control how much weight each component receives are not hand-tuned. They are learned from expert pairwise judgments through a feedback loop: domain experts compare pairs of candidates, and a statistical model (Plackett-Luce) fits the exponents to match those judgments. This means the ranking improves over time as more expert input is collected.
+
+## Three Researcher Populations
+
+Not all researchers are the same. A clinical oncologist, a medicinal chemist, and a translational biologist each have different kinds of evidence supporting their expertise. Aegis handles this by defining three distinct populations, each with its own weight vector learned independently:
+
+### Translational
+
+Translational researchers bridge basic science and clinical application. Their evidence comes primarily from PubMed publications, NIH and international grants, clinical trial participation, and citation metrics. The quality prior for this population emphasizes citation impact, funding, and translational output — the ability to move findings from bench to bedside.
+
+### Drug Discovery
+
+Drug-discovery researchers work in pharmaceutical and biotech contexts. Their evidence comes primarily from patents (USPTO, EPO, WIPO), chemical biology databases like ChEMBL, and translational publications. The quality prior for this population heavily weights patent-derived translational impact, reflecting that intellectual property is the primary output measure in this domain.
+
+### Clinician
+
+Clinicians are practicing physicians involved in research. Their evidence comes from medical licenses (NPI/NPPES), board certifications (ABMS), hospital affiliations and tier rankings, clinical trial leadership, procedure volumes, and publications. This population uses an additional seventh sub-score in the quality prior — the clinician-specific F7 score — which synthesizes board certification status, license standing, hospital tier, trial PI roles, and procedure volume into a single metric.
+
+Each population has its own weight configuration, and the exponents within each are learned independently from population-specific expert judgments. This means the system can correctly value a strong patent portfolio for a drug-discovery researcher without penalizing a translational researcher who has no patents but a strong publication record.

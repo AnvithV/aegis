@@ -1,0 +1,39 @@
+---
+sidebar_position: 3
+title: Integrity Gate
+---
+
+# Integrity Gate
+
+Before a candidate receives a ranking score, they pass through the integrity gate. This component determines whether a researcher has disqualifying integrity issues (resulting in exclusion from rankings) or concerning signals (resulting in score reductions). The gate exists to prevent recommending researchers with serious professional or ethical issues, while still being fair to those with minor or contested concerns.
+
+## Hard Disqualifiers
+
+Some integrity signals are severe enough to warrant complete exclusion. When a hard gate fires, the candidate's score is zeroed out and they are removed from ranked output entirely. Hard disqualifiers include:
+
+- **Retraction for fabrication or falsification:** If a researcher has a publication retracted specifically for data fabrication or falsification (as opposed to honest error), they are excluded. The system distinguishes between retraction reasons using Retraction Watch metadata.
+- **ORI finding:** A formal finding of research misconduct by the Office of Research Integrity results in exclusion. ORI findings represent completed federal investigations, not allegations.
+- **OFAC/SAM sanctions:** Matches against US Treasury sanctions lists (OFAC) or federal exclusion/debarment lists (SAM) trigger hard exclusion. These indicate legal prohibitions on engagement.
+- **LEIE exclusion:** Individuals on the HHS List of Excluded Individuals/Entities are barred from participation in federal healthcare programs.
+- **Medical board disciplinary action:** Active license revocations or suspensions from state medical boards trigger hard exclusion for clinician candidates.
+
+Hard gates short-circuit: the system evaluates rules in priority order and stops at the first match. This ensures the most serious disqualifier is recorded as the reason for exclusion.
+
+## Soft Discounts
+
+Not every integrity concern warrants total exclusion. Soft signals reduce a candidate's score by a proportional discount rather than eliminating them:
+
+- **Predatory journal publications:** If a significant fraction of a researcher's publications appear in journals identified as predatory, a discount is applied proportional to the predatory load. A researcher with one paper in a borderline journal is treated differently from one whose entire publication record is in predatory outlets.
+- **Retracted co-authorships:** Being a co-author on a retracted paper (where the retraction is not for fabrication/falsification, or where the candidate is not the responsible party) triggers a smaller discount. The discount reflects the concern without the severity of a hard exclusion.
+- **Authorship inconsistency:** Patterns suggesting questionable authorship practices — such as appearing on an implausibly high number of papers in a short period — apply a discount.
+- **Paper-mill indicators:** Statistical signals suggesting possible paper-mill involvement (unusual citation patterns, boilerplate methodology sections, suspicious image reuse) trigger a discount when detected but not yet confirmed.
+
+Each soft discount has a floor — a minimum score multiplier below which the discount cannot push the candidate. This prevents an accumulation of minor signals from effectively excluding a candidate without a hard-gate-level finding.
+
+## Contestability
+
+Researchers may be incorrectly flagged. The integrity gate includes a contestability workflow: if a candidate or their representative provides evidence that an integrity flag is incorrect (for example, a retraction was subsequently reversed, or an OFAC match is a false positive due to a common name), the contestability store records an override. Overrides are time-stamped, include the evidence provided, and are applied on subsequent ranking queries. This ensures the system is correctable without requiring manual database edits.
+
+## Transparency
+
+Every integrity decision is logged. When a candidate is excluded or discounted, the ranked output includes the specific rule that fired, the source record that triggered it, and the resulting score impact. Task managers can see exactly why a candidate was excluded or downweighted, and the audit trail supports review and dispute resolution.

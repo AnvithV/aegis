@@ -47,3 +47,8 @@ coverage.xml
 
 # mypy
 .mypy_cache/
+
+# Docusaurus
+website/node_modules/
+website/.docusaurus/
+website/build/

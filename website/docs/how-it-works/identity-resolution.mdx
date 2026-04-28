@@ -1,0 +1,46 @@
+---
+sidebar_position: 2
+title: Identity Resolution
+---
+
+# Identity Resolution
+
+A single researcher may appear across dozens of data sources under different name variants, affiliations, and identifiers. "J. Smith" at Stanford who published in PubMed might be the same person as "John A. Smith" listed as a PI on an NIH grant and "Smith, J." on a patent filing. Without resolving these records into a single unified candidate, scoring would fragment a researcher's evidence across multiple incomplete profiles.
+
+Aegis uses a two-tier identity resolution pipeline to unify records from all ingested sources into consolidated candidate profiles.
+
+## Tier 1: Deterministic Linking
+
+The first tier uses strong keys — persistent, globally unique identifiers — to link records with certainty. When two records share the same ORCID or eRA Commons ID, they belong to the same researcher. No ambiguity, no probability — just a direct match.
+
+Strong keys currently used include:
+
+- **ORCID:** A researcher-managed persistent identifier widely adopted in academic publishing and grant applications.
+- **NPI (National Provider Identifier):** A unique identifier assigned to healthcare providers in the US, used to link clinician credential records.
+- **ROR (Research Organization Registry):** Used to normalize institutional affiliations, so that "MIT," "Massachusetts Institute of Technology," and "M.I.T." all resolve to the same organization.
+
+Deterministic linking is fast and precise but limited in coverage — not every record has a strong key attached. Records without strong keys fall through to Tier 2.
+
+## Tier 2: Probabilistic Linking
+
+The second tier handles records that lack strong keys by computing a match probability based on multiple signals:
+
+- **Name similarity:** Comparing name variants using fuzzy string matching that accounts for initials, transliterations, and name-order differences.
+- **Affiliation overlap:** Whether two records share current or historical institutional affiliations, normalized via ROR.
+- **Co-authorship patterns:** Whether the individuals have co-authored publications together, which is a strong signal of being the same person (or at least being in close professional proximity).
+- **MeSH topic similarity:** Whether the research topics across two records overlap, measured by Jaccard similarity of MeSH descriptors.
+- **Temporal consistency:** Whether the career timeline implied by the records is plausible — a publication in 1995 and a grant in 2020 could be the same person, but a patent filed before the researcher was born cannot be.
+
+These signals are combined using a Fellegi-Sunter record linkage model that produces a composite match probability for each candidate pair.
+
+## Confidence Thresholds
+
+The match probability determines what happens next:
+
+- **Above 0.95:** Auto-merge. The records are linked into a single candidate profile automatically. At this confidence level, the false-positive rate is low enough that automation is safe.
+- **Between 0.80 and 0.95:** Flagged for review. The match is plausible but not certain. These cases enter a human-in-the-loop review queue where a reviewer sees the evidence for and against the match and makes a decision. Reviewer decisions feed back as training data to improve the model over time.
+- **Below 0.80:** No link. The records remain separate.
+
+## Cross-Population Merge
+
+A researcher may appear in multiple populations — a clinician who also publishes translational research, or a drug-discovery scientist who holds an NPI. Cross-population identity merge handles these cases, ensuring that a single person has one unified candidate profile even when their evidence spans population boundaries. The merge uses the same two-tier approach but additionally considers cross-population identifiers to catch matches that population-specific linking would miss.

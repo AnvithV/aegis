@@ -1,0 +1,43 @@
+---
+sidebar_position: 5
+title: Feedback Loop
+---
+
+# Feedback Loop
+
+Aegis does not rely on static, hand-tuned scoring weights. Instead, it operates a continuous feedback loop that refines ranking exponents over time based on real-world evidence. The system learns from two sources: expert audit panels and downstream task quality.
+
+## Downstream Task Quality
+
+When Aegis recommends candidates for a labeling task, the resulting work product has measurable quality. Three signals are ingested back into Aegis:
+
+- **Fleiss kappa:** A measure of inter-rater agreement among the researchers assigned to a task. High kappa indicates that the recommended researchers produced consistent, reliable labels. Low kappa suggests the researchers may not have been well-matched to the task.
+- **Accept rate:** The proportion of completed labels that the customer accepted without revision. A high accept rate indicates that the recommended candidates performed well.
+- **Consensus rate:** The proportion of labels where all assigned researchers agreed. This captures the degree of alignment among the recommended candidates on a given task.
+
+These signals are mapped back to the specific (query, candidate) pairs that produced them. Within each task, candidates who produced higher-quality outputs are ranked above those who produced lower-quality outputs, creating derived pairwise judgments that feed directly into weight learning.
+
+## Weight Relearning
+
+The Plackett-Luce model is refit on a weekly cadence using the growing union of two data sources:
+
+- **Audit-panel judgments:** Expert pairwise comparisons collected during Phase 1, where domain experts directly compared pairs of candidates and indicated which should rank higher.
+- **Downstream-quality-derived pairs:** Pairwise judgments derived from task outcomes as described above.
+
+As downstream data accumulates and proves its reliability, it receives higher weight in the fitting process. This reflects the fact that real-world task outcomes are a more direct measure of ranking quality than retrospective expert judgments, once enough data has been collected.
+
+The training set grows monotonically — new judgments are added but old ones are never removed. Over time, per-specialty exponents naturally diverge as different specialties accumulate different evidence distributions. A specialty with abundant downstream feedback may see its weights shift substantially from the cold-start values, while a specialty with limited data remains closer to the audit-panel-derived baseline.
+
+## Cold Start
+
+When Aegis first launches or enters a new specialty, there is no downstream data to learn from. The cold-start strategy uses prior weights derived from audit-panel judgments. A cold-start guard prevents the learning pipeline from fitting weights when the judgment count is below a minimum threshold, ensuring that noisy early data does not produce unstable rankings. Until the threshold is met, the system uses the most recent stable weight vector.
+
+## Guardrails
+
+The feedback loop includes several safeguards to prevent bad data or edge cases from degrading ranking quality:
+
+- **Convergence checks:** Each refit must converge within defined tolerances. If the optimizer fails to converge, the refit is discarded and the prior weights are retained.
+- **Stability monitoring:** The system tracks weight drift across refit cycles. If weights shift too far too fast, an alert fires and the change is flagged for review rather than auto-deployed.
+- **Auto-deploy vs. manual gate:** Small weight changes (where all exponent deltas are below a threshold) are deployed automatically. Large changes require manual approval from a human reviewer before taking effect. This prevents a sudden influx of anomalous feedback from silently changing rankings.
+- **Per-specialty coverage tracking:** The system monitors how many judgments are available per specialty. Specialties with thin data are flagged, and their weights receive lower confidence, ensuring that poorly-covered specialties do not produce overconfident rankings.
+- **Refit reports:** Every refit cycle produces a detailed report comparing prior and new weights, per-specialty judgment coverage, confidence intervals, source breakdown (audit-panel vs. downstream), and the deployment decision. These reports create an audit trail for understanding how and why weights changed over time.

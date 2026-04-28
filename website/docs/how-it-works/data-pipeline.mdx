@@ -1,0 +1,32 @@
+---
+sidebar_position: 1
+title: Data Pipeline
+---
+
+# Data Pipeline
+
+Aegis ingests data from approximately 25 sources covering publications, grants, patents, clinical trials, clinician credentials, integrity records, and taxonomy crosswalks. The ingestion layer is the foundation of everything downstream — scoring, integrity checks, and ranking all depend on having fresh, well-structured data from these sources.
+
+## Source Clients
+
+Each data source has a dedicated typed API client built with httpx for HTTP transport, Pydantic for response validation, and a configurable retry policy for transient failures. Every client returns strongly typed records — a PubMed client returns publication records with authors, MeSH descriptors, and publication dates; a USPTO client returns patent records with inventor names and CPC classifications. This typed approach catches data-quality issues at the ingestion boundary rather than letting malformed data propagate into scoring.
+
+## Ingestion Cadence
+
+Not all sources change at the same rate, so Aegis uses three ingestion tiers:
+
+- **Event-driven (less than 6 hours):** Integrity sources — Retraction Watch, ORI, OFAC/SAM, and LEIE — are ingested as quickly as possible. When a researcher is sanctioned, debarred, or found to have committed fraud, that information must flow into the integrity gate before the next ranking query. These sources are polled on short intervals with change-detection logic to minimize unnecessary processing.
+
+- **Daily:** Preprint servers — bioRxiv and medRxiv — publish new submissions every day. Daily ingestion ensures that active researchers producing preprints are reflected in recency and topical-fit scores without waiting for the weekly cycle.
+
+- **Weekly:** The majority of sources — PubMed, NIH RePORTER, USPTO PatentsView, EPO, ClinicalTrials.gov, NPI, ABMS, and others — are refreshed on a weekly cadence. These sources update less frequently or have bulk-download mechanisms that align naturally with weekly batch processing.
+
+## Storage
+
+Ingested records land in a DuckDB analytical store. DuckDB provides the columnar storage and analytical query performance needed for scoring computations across large candidate populations, while keeping the infrastructure lightweight — no external database server to manage.
+
+Each source client writes records into source-specific tables with a consistent schema: a primary key, a timestamp marking when the record was ingested, and the source-specific payload fields. A shared migration system manages schema evolution as new sources are added or existing schemas change.
+
+## Observability
+
+The ingestion layer includes stale-source alerting. If a source that normally refreshes weekly has not produced new records in over 10 days, an alert fires. This catches upstream API outages, credential expirations, and schema-breaking changes before they silently degrade ranking quality. Per-source ingestion metrics — record counts, error rates, and latency percentiles — are tracked for operational visibility.
