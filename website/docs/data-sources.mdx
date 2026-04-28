@@ -1,0 +1,76 @@
+---
+sidebar_position: 4
+title: Data Sources
+---
+
+# Data Sources
+
+Aegis ingests data from approximately 25 sources across seven categories. Each source feeds into one or more of the three researcher populations (Translational, Drug Discovery, Clinician) and is refreshed on a defined cadence. The tables below list every source, what it provides, how often it is refreshed, and which populations it serves.
+
+## Publications
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| PubMed | Indexed biomedical publications with MeSH descriptors, author affiliations, article types, and publication dates | Weekly | Translational, Clinician |
+| bioRxiv | Preprint publications in biology, providing early signal on active research before peer review | Daily | Translational |
+| medRxiv | Preprint publications in health sciences and clinical research | Daily | Translational, Clinician |
+| iCite | NIH citation metrics including Relative Citation Ratio (RCR), which normalizes citation counts by field and time | Weekly | Translational |
+
+## Grants
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| NIH RePORTER | US federal research grants with principal investigators, activity codes, funding amounts, and active/inactive status | Weekly | Translational |
+| ERC (European Research Council) | European research grants for frontier research across all disciplines | Weekly | Translational |
+| Horizon Europe | EU framework programme grants covering collaborative and individual research funding | Weekly | Translational |
+| MRC (Medical Research Council) | UK medical research grants with investigator details and project descriptions | Weekly | Translational |
+| CIHR (Canadian Institutes of Health Research) | Canadian health research grants with investigator and funding data | Weekly | Translational |
+| JST/KAKEN | Japanese research grants from the Japan Science and Technology Agency and KAKEN database, with Japanese name transliteration support | Weekly | Translational |
+| NSFC (National Natural Science Foundation of China) | Chinese research grants with investigator and project data; records include a coverage caveat for transparency | Weekly | Translational |
+
+## Patents
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| USPTO PatentsView | US patent data with inventor names, CPC classifications, filing and grant dates, and assignee information | Weekly | Drug Discovery |
+| EPO Espacenet | European patent data covering all 39 EPO member states with inventor and classification details | Weekly | Drug Discovery |
+| WIPO PCT | International patent applications filed under the Patent Cooperation Treaty, providing global patent coverage | Weekly | Drug Discovery |
+
+## Clinical
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| ClinicalTrials.gov | Clinical trial registrations with investigator roles, trial phase, sponsor, and study design | Weekly | Translational, Clinician |
+| CMS Medicare Utilization | Medicare procedure volumes by provider, used as a proxy for clinical activity and procedure expertise | Weekly | Clinician |
+
+## Clinician Credentials
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| NPPES/NPI | National Provider Identifier registry with provider names, specialties, practice locations, and license information | Weekly | Clinician |
+| ABMS | American Board of Medical Specialties board certification status and specialty designations | Weekly | Clinician |
+| State Medical Boards (10 states) | Active medical license verification and disciplinary action history across ten US states | Weekly | Clinician |
+| USNWR Hospital Tier | US News and World Report hospital rankings, used to assign a hospital-tier score to affiliated clinicians | Weekly | Clinician |
+
+## Integrity
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| Retraction Watch | Database of retracted publications, used to identify retracted co-authorships and flag potential research integrity concerns | Event-driven (&lt;6h) | All |
+| ORI (Office of Research Integrity) | Federal findings of research misconduct, used as a hard-gate signal for candidate exclusion | Event-driven (&lt;6h) | All |
+| OFAC/SAM | US Treasury sanctions lists (OFAC) and federal exclusion lists (SAM), used as hard-gate signals | Event-driven (&lt;6h) | All |
+| LEIE (List of Excluded Individuals/Entities) | HHS exclusion list for individuals barred from federal healthcare programs | Event-driven (&lt;6h) | All |
+
+## Taxonomy and Classification
+
+| Source | What It Provides | Refresh Cadence | Population(s) |
+|--------|-----------------|-----------------|---------------|
+| ChEMBL | Chemical biology database providing compound-target-assay relationships for mapping drug-discovery activity | Weekly | Drug Discovery |
+| ICD-10/CPT-MeSH | Medical coding crosswalks that map clinical procedure codes and diagnosis codes to MeSH descriptors for specialty classification | Weekly | Clinician |
+| CPC-MeSH cross-walks | Patent classification (CPC) to MeSH descriptor mappings, enabling topical-fit scoring for patent-based evidence | Weekly | Drug Discovery |
+
+## Geographic Coverage
+
+Aegis currently draws approximately 15% of its candidate data from non-US sources. Phase 2 established the initial international source clients (EPO, ERC, MRC, CIHR, JST/KAKEN, NSFC), and Phase 3 broadened geographic coverage with expanded ROR-normalized affiliations across JP, CN, GB, CA, EU, and AU institutions. The system includes per-region coverage diagnostics with a 75% bias threshold that triggers caveats in API responses when geographic representation is skewed.
+
+The target is 40%+ non-US candidate coverage after Phase 3 geographic broadening is fully deployed, with ongoing tracking of per-region ratios and regression alerting to ensure coverage does not regress.

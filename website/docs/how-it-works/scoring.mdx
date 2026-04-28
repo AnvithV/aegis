@@ -1,0 +1,58 @@
+---
+sidebar_position: 4
+title: Scoring
+---
+
+# Scoring
+
+Aegis produces a composite ranking score for each candidate by combining four components: a quality prior, topical fit, recency, and the integrity gate. Each component captures a different dimension of a researcher's suitability for a given specialty query.
+
+## Quality Prior
+
+The quality prior measures the overall strength of a researcher's profile, independent of any specific query. It answers the question: "How strong is this researcher in general?" The prior is built from six sub-scores (seven for clinicians):
+
+- **F1 — Citation Impact:** Based on the Relative Citation Ratio from iCite, which normalizes citation counts by field and publication year. A highly cited paper in a small field is valued appropriately rather than being overshadowed by papers in high-volume fields.
+- **F2 — Funding Trajectory:** Tracks NIH and international grant activity, considering total funding, number of active grants, and the progression from early-career to established investigator awards.
+- **F3 — Leadership Positions:** Captures editorial board memberships, society leadership roles, and other markers of professional standing in the field.
+- **F4 — Apex-List Membership:** Whether the researcher appears on curated apex rosters — recognized lists of top experts in specific fields, such as FDA advisory committee members or NCCN panel members.
+- **F5 — Translational Output:** Measures the ability to move findings from bench to bedside, incorporating clinical trial involvement, FDA drug approvals, and for drug-discovery researchers, patent filings and chemical biology contributions via ChEMBL.
+- **F6 — Academic Lineage:** Captures the researcher's training pedigree through the academic family tree — who they trained with and what those mentors have accomplished.
+- **F7 — Clinician Score (clinician population only):** Synthesizes board certification status, active medical licenses, hospital-tier affiliation, clinical-trial PI roles, and procedure volumes into a single clinician-specific metric.
+
+These sub-scores are combined using a weighted geometric mean. The geometric mean naturally penalizes candidates who are strong in one area but weak in others — a researcher with one exceptional metric and several poor ones scores lower than a well-rounded candidate with consistently good scores across all dimensions.
+
+Each sub-score is percentile-calibrated within its specialty cohort, ensuring that the scale is consistent across different fields where raw values may differ dramatically.
+
+## Topical Fit
+
+Topical fit is query-dependent — it measures how closely a candidate's body of work aligns with the specific specialty being queried. The process works in three steps:
+
+1. **Query expansion:** The specialty query is expanded into a set of MeSH (Medical Subject Headings) descriptors that capture the relevant topic space. This expansion handles synonyms and related terms so that a query for "NSCLC immunotherapy" also picks up candidates working on closely related topics.
+
+2. **Candidate portfolio:** Each candidate's publications, patents, grants, and trials are mapped to MeSH descriptors, building a vector that represents their research footprint across the topic space.
+
+3. **Similarity:** The query vector and candidate vector are compared using cosine similarity, producing a score between zero and one. A candidate whose work is tightly focused on the queried specialty scores high; a generalist whose work touches the topic peripherally scores lower.
+
+## Recency
+
+Recency is also query-dependent. It measures how recently a candidate has been active in the queried specialty. The score uses an exponential decay function: recent publications, grants, and trials in the relevant specialty contribute more than older ones. A researcher who published five papers in the last two years scores higher on recency than one whose last relevant publication was a decade ago.
+
+The decay rate is tuned so that very recent work receives strong signal without completely discounting sustained careers. A researcher with steady output over 15 years still receives meaningful recency credit, while someone who left the field 8 years ago sees their score decay substantially.
+
+## Composite Score
+
+The four components combine into the final ranking score:
+
+**Score = Integrity x Quality^alpha x Topical Fit^beta x Recency^gamma**
+
+The exponents — alpha, beta, and gamma — control how much weight each component receives in the final ranking. These exponents are not set by hand. They are learned from data through a Plackett-Luce statistical model that fits the exponents to match expert pairwise judgments: domain experts compare pairs of candidates and indicate which should rank higher, and the model finds the exponent values that best reproduce those preferences.
+
+## Per-Population Weights
+
+Each of the three researcher populations — Translational, Drug Discovery, and Clinician — has its own weight vector. The exponents are learned independently for each population because the relative importance of scoring components differs:
+
+- In the **Translational** population, citation impact and funding trajectory carry significant weight.
+- In the **Drug Discovery** population, translational output (heavily driven by patents) is the dominant signal.
+- In the **Clinician** population, the clinician-specific F7 score and leadership roles receive substantial weight.
+
+Weight vectors are versioned and stored in configuration files. When the learning pipeline produces updated exponents, the new weights are deployed through a controlled process with stability checks.
