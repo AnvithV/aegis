@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" font-family="system-ui, -apple-system, sans-serif">
+  <!-- Background -->
+  <rect width="900" height="520" fill="#f8f9fa" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" font-size="18" font-weight="600" fill="#1a1a2e">Aegis — High-Level Architecture</text>
+
+  <!-- Arrowhead markers -->
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1a73e8"/>
+    </marker>
+    <marker id="arrowL" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto">
+      <path d="M8,0 L8,6 L0,3 z" fill="#1a73e8"/>
+    </marker>
+    <marker id="arrowG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#34a853"/>
+    </marker>
+  </defs>
+
+  <!-- ── DATA SOURCES box ── -->
+  <rect x="24" y="64" width="148" height="392" rx="8" fill="#e8f0fe" stroke="#1a73e8" stroke-width="1.5"/>
+  <text x="98" y="84" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">DATA SOURCES</text>
+
+  <rect x="36" y="94" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="111" text-anchor="middle" font-size="11" fill="#333">PubMed / iCite</text>
+
+  <rect x="36" y="124" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="141" text-anchor="middle" font-size="11" fill="#333">OpenAlex Works</text>
+
+  <rect x="36" y="154" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="171" text-anchor="middle" font-size="11" fill="#333">NIH RePORTER</text>
+
+  <rect x="36" y="184" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="201" text-anchor="middle" font-size="11" fill="#333">OpenAlex Grants</text>
+
+  <rect x="36" y="214" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="231" text-anchor="middle" font-size="11" fill="#333">USPTO / EPO / WIPO</text>
+
+  <rect x="36" y="244" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="261" text-anchor="middle" font-size="11" fill="#333">ClinicalTrials.gov</text>
+
+  <rect x="36" y="274" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="291" text-anchor="middle" font-size="11" fill="#333">NPPES / ABMS</text>
+
+  <rect x="36" y="304" width="124" height="24" rx="4" fill="#fff" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="98" y="321" text-anchor="middle" font-size="11" fill="#333">State Med. Boards</text>
+
+  <rect x="36" y="334" width="124" height="24" rx="4" fill="#fff4e5" stroke="#f9ab00" stroke-width="1"/>
+  <text x="98" y="351" text-anchor="middle" font-size="11" fill="#b06000">Retraction Watch</text>
+
+  <rect x="36" y="364" width="124" height="24" rx="4" fill="#fff4e5" stroke="#f9ab00" stroke-width="1"/>
+  <text x="98" y="381" text-anchor="middle" font-size="11" fill="#b06000">ORI / OFAC / LEIE</text>
+
+  <rect x="36" y="394" width="124" height="24" rx="4" fill="#f3f3f3" stroke="#ccc" stroke-width="1"/>
+  <text x="98" y="411" text-anchor="middle" font-size="11" fill="#555">ChEMBL / CPC-MeSH</text>
+
+  <rect x="36" y="424" width="124" height="20" rx="4" fill="#f3f3f3" stroke="#ccc" stroke-width="1"/>
+  <text x="98" y="438" text-anchor="middle" font-size="10" fill="#777">+ 5 more sources</text>
+
+  <!-- Arrow: sources → ingestion -->
+  <line x1="172" y1="260" x2="208" y2="260" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ── INGESTION box ── -->
+  <rect x="208" y="180" width="140" height="160" rx="8" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+  <text x="278" y="202" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">INGESTION</text>
+  <text x="278" y="222" text-anchor="middle" font-size="10" fill="#555">Typed API clients</text>
+  <text x="278" y="238" text-anchor="middle" font-size="10" fill="#555">httpx + Pydantic</text>
+  <text x="278" y="254" text-anchor="middle" font-size="10" fill="#555">RetryPolicy</text>
+  <line x1="228" y1="266" x2="328" y2="266" stroke="#eee" stroke-width="1"/>
+  <text x="278" y="282" text-anchor="middle" font-size="10" fill="#e65100">Event-driven &lt;6h</text>
+  <text x="278" y="298" text-anchor="middle" font-size="10" fill="#555">Daily preprints</text>
+  <text x="278" y="314" text-anchor="middle" font-size="10" fill="#555">Weekly bulk</text>
+
+  <!-- Arrow: ingestion → identity -->
+  <line x1="348" y1="260" x2="384" y2="260" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ── IDENTITY RESOLUTION box ── -->
+  <rect x="384" y="180" width="140" height="160" rx="8" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+  <text x="454" y="200" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">IDENTITY</text>
+  <text x="454" y="216" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">RESOLUTION</text>
+  <text x="454" y="238" text-anchor="middle" font-size="10" fill="#555">ORCID / NPI / ROR</text>
+  <text x="454" y="254" text-anchor="middle" font-size="10" fill="#555">Probabilistic linker</text>
+  <text x="454" y="270" text-anchor="middle" font-size="10" fill="#555">Confidence scoring</text>
+  <line x1="404" y1="282" x2="524" y2="282" stroke="#eee" stroke-width="1"/>
+  <text x="454" y="298" text-anchor="middle" font-size="10" fill="#555">Cross-population</text>
+  <text x="454" y="314" text-anchor="middle" font-size="10" fill="#555">merge</text>
+
+  <!-- Arrow: identity → candidate store -->
+  <line x1="524" y1="260" x2="560" y2="260" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ── CANDIDATE STORE box ── -->
+  <rect x="560" y="214" width="120" height="92" rx="8" fill="#e6f4ea" stroke="#34a853" stroke-width="1.5"/>
+  <text x="620" y="236" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">CANDIDATE</text>
+  <text x="620" y="252" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">STORE</text>
+  <text x="620" y="272" text-anchor="middle" font-size="10" fill="#555">DuckDB</text>
+  <text x="620" y="288" text-anchor="middle" font-size="10" fill="#555">3 populations</text>
+
+  <!-- Arrow: store → scoring -->
+  <line x1="680" y1="260" x2="716" y2="260" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ── SCORING ENGINE box ── -->
+  <rect x="716" y="140" width="156" height="240" rx="8" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+  <text x="794" y="162" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">SCORING ENGINE</text>
+
+  <rect x="728" y="172" width="132" height="28" rx="4" fill="#e8f0fe" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="794" y="191" text-anchor="middle" font-size="11" fill="#333">R — Recency</text>
+
+  <rect x="728" y="206" width="132" height="28" rx="4" fill="#e8f0fe" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="794" y="225" text-anchor="middle" font-size="11" fill="#333">Q — Quality Prior</text>
+
+  <rect x="728" y="240" width="132" height="28" rx="4" fill="#e8f0fe" stroke="#c5d8fd" stroke-width="1"/>
+  <text x="794" y="259" text-anchor="middle" font-size="11" fill="#333">C — Topical Fit</text>
+
+  <rect x="728" y="276" width="132" height="28" rx="4" fill="#fce8e6" stroke="#f5c6c2" stroke-width="1"/>
+  <text x="794" y="295" text-anchor="middle" font-size="11" fill="#c5221f">I — Integrity Gate</text>
+
+  <line x1="736" y1="316" x2="868" y2="316" stroke="#eee" stroke-width="1"/>
+  <text x="794" y="334" text-anchor="middle" font-size="10" fill="#555">Plackett-Luce</text>
+  <text x="794" y="350" text-anchor="middle" font-size="10" fill="#555">weight learning</text>
+
+  <!-- Arrow: scoring → api -->
+  <line x1="794" y1="380" x2="794" y2="408" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrowDown)"/>
+
+  <!-- ── API box ── -->
+  <rect x="716" y="408" width="156" height="60" rx="8" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+  <text x="794" y="432" text-anchor="middle" font-size="12" font-weight="600" fill="#1a73e8">API LAYER</text>
+  <text x="794" y="452" text-anchor="middle" font-size="10" fill="#555">FastAPI · JWT · Audit log</text>
+
+  <!-- Arrow: api → frontend -->
+  <line x1="716" y1="438" x2="700" y2="438" stroke="#1a73e8" stroke-width="2" marker-end="url(#arrowL)"/>
+
+  <!-- ── FRONTEND box ── -->
+  <rect x="560" y="408" width="140" height="60" rx="8" fill="#fce8e6" stroke="#ea4335" stroke-width="1.5"/>
+  <text x="630" y="432" text-anchor="middle" font-size="12" font-weight="600" fill="#c5221f">FRONTEND</text>
+  <text x="630" y="452" text-anchor="middle" font-size="10" fill="#555">Next.js · 8 screens</text>
+
+  <!-- Feedback loop arrow -->
+  <path d="M 630 408 Q 630 370 680 350 Q 710 338 716 336" fill="none" stroke="#34a853" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arrowG)"/>
+  <text x="644" y="384" font-size="9" fill="#137333">feedback loop</text>
+
+  <!-- Legend -->
+  <rect x="24" y="472" width="420" height="36" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <rect x="36" y="483" width="14" height="14" rx="2" fill="#fff4e5" stroke="#f9ab00" stroke-width="1"/>
+  <text x="56" y="494" font-size="10" fill="#555">Integrity sources (event-driven &lt;6h)</text>
+  <rect x="210" y="483" width="14" height="14" rx="2" fill="#e8f0fe" stroke="#1a73e8" stroke-width="1"/>
+  <text x="230" y="494" font-size="10" fill="#555">Core pipeline</text>
+  <line x1="308" y1="490" x2="334" y2="490" stroke="#34a853" stroke-width="1.5" stroke-dasharray="4 2"/>
+  <text x="340" y="494" font-size="10" fill="#555">Feedback loop</text>
+
+  <defs>
+    <marker id="arrowDown" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
+      <path d="M0,0 L6,0 L3,8 z" fill="#1a73e8"/>
+    </marker>
+  </defs>
+</svg>
