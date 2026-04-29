@@ -5,7 +5,7 @@ title: Phase-by-Phase Overview
 
 # Phase-by-Phase Overview
 
-Aegis was built incrementally across five phases, each adding a distinct layer of capability. Later phases depend on earlier ones, and each phase was validated against specific exit criteria before the next one began.
+Aegis was built incrementally across eight phases, each adding a distinct layer of capability. Later phases depend on earlier ones, and each phase was validated against specific exit criteria before the next one began.
 
 ## Phase 0 — Foundation
 
@@ -27,12 +27,30 @@ Aegis was built incrementally across five phases, each adding a distinct layer o
 
 ## Phase 3 — Production
 
-**What it built:** The operational surface needed to run Aegis as a production service. Phase 3 delivered a FastAPI-based customer query API with JWT authentication, rate limiting, audit logging, and evidence-trail responses. It implemented event-driven integrity ingestion with sub-6-hour latency for critical sources (Retraction Watch, ORI, OFAC/SAM, LEIE) and daily preprint ingestion (bioRxiv, medRxiv). The downstream-task-quality feedback loop ingests Fleiss kappa, accept rate, and consensus rate from customer labeling tasks and feeds them into weekly Plackett-Luce weight relearning. Geographic broadening added seven international source clients (WIPO, ERC, Horizon Europe, MRC, CIHR, JST/KAKEN, NSFC) with per-region coverage diagnostics and a 40%+ non-US target. The contestability workflow allows integrity decisions to be challenged and overridden with evidence.
+**What it built:** The operational surface needed to run Aegis as a production service. Phase 3 delivered a FastAPI-based customer query API with JWT authentication, rate limiting, audit logging, and evidence-trail responses. It implemented event-driven integrity ingestion with sub-6-hour latency for critical sources (Retraction Watch, ORI, OFAC/SAM, LEIE). The downstream-task-quality feedback loop ingests Fleiss kappa, accept rate, and consensus rate from customer labeling tasks and feeds them into weekly Plackett-Luce weight relearning. The contestability workflow allows integrity decisions to be challenged and overridden with evidence.
 
-**What it unlocked:** Aegis became a live production service with an API that customers can query, a feedback loop that continuously improves rankings from real-world outcomes, and international coverage that reduces US-centricity in candidate pools.
+**What it unlocked:** Aegis became a live production service with an API that customers can query and a feedback loop that continuously improves rankings from real-world outcomes.
 
-## Phase 4 — Frontend (In Progress)
+## Phase 4 — Frontend + Docs (Complete)
 
 **What it built:** A Next.js web frontend providing a user interface for task managers to interact with Aegis. The frontend includes three core screens: New Query for submitting specialty ranking requests, Results for viewing and exploring ranked candidate lists with score breakdowns, and Query History for reviewing past queries and their outcomes. The documentation site (what you are reading now) was also built in Phase 4.
 
 **What it unlocked:** Task managers can interact with Aegis through a browser rather than making direct API calls, lowering the barrier to use and making score breakdowns, evidence trails, and integrity flags accessible through a visual interface.
+
+## Phase 5 — Production Reality
+
+**What it built:** Replaced six broken international grant sources (ERC, Horizon, MRC, CIHR, KAKEN, NSFC) with OpenAlex. Implemented real F1-F7 scoring, query type classifier (basic_research/drug_discovery/clinical_trial_pi/policy_epi), SSE streaming for source-by-source progress, shortlists, candidate notes. Deployed to Fly.io (backend) and Vercel (frontend).
+
+**What it unlocked:** Aegis became deployed with real data — approximately 360 candidates per query from PubMed, NIH RePORTER, CT.gov, and OpenAlex.
+
+## Phase 6 — Full Wiring
+
+**What it built:** Wired ingestion converters into the pipeline orchestrator. Mounted the feedback router (`POST /v1/feedback/tasks/{id}/outcomes`). Implemented the refit API (`POST /v1/refit/trigger`, `GET /v1/refit/status`) and HITL API (`GET /v1/hitl/next`, `POST /v1/hitl/{id}/decide`). WeightSliderPanel gained a "Reset to trained" button for live client-side re-ranking. All frontend proxy routes created.
+
+**What it unlocked:** Every component connected end-to-end with no stubs.
+
+## Phase 7 — Jobs System
+
+**What it built:** `POST /v1/queries` returns HTTP 202 immediately with `{job_id, status}`. The pipeline runs via asyncio.create_task. JobStore DuckDB table tracks job state. `GET /v1/jobs`, `GET /v1/jobs/{id}`, and `POST /v1/jobs/{id}/cancel` endpoints provide job management. Frontend /jobs page with 3-second polling and status badges. /jobs/[id] page with 5-source SSE grid and cancel support.
+
+**What it unlocked:** No more 30-60 second blocking on query submission. Users submit a query, see real-time source-by-source progress, and can start another query immediately.

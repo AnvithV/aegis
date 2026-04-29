@@ -13,7 +13,7 @@ Healthcare, biomedical research, and drug discovery span millions of active rese
 
 Manual approaches do not scale. Keyword searches across PubMed or patent databases return noisy results without any notion of quality or fit. Existing researcher profiles (Google Scholar, ORCID) are self-reported and incomplete. No single source captures the full picture of a researcher's standing across publications, funding, clinical work, and integrity history.
 
-Aegis solves this by ingesting data from approximately 25 sources, resolving researcher identities across them, and computing a multi-dimensional ranking that balances quality, relevance, recency, and integrity.
+Aegis solves this by ingesting data from approximately 20 sources, resolving researcher identities across them, and computing a multi-dimensional ranking that balances quality, relevance, recency, and integrity.
 
 ## What Aegis Produces
 
@@ -23,6 +23,8 @@ For a given specialty query, Aegis produces:
 - **Per-candidate scores** broken down by component so that every ranking decision is transparent and auditable.
 - **Evidence trails** linking each score component back to the underlying data: specific publications, grants, patents, clinical trials, or integrity records.
 - **Integrity flags** indicating whether a candidate has been hard-excluded (for reasons such as federal debarment or confirmed research fraud) or received soft scoring discounts (for issues such as retracted co-authorships or predatory journal publications).
+- **A job tracking system** that lets task managers submit queries and immediately move on. Progress is visible in real time through the Jobs dashboard.
+- **Shortlists and notes** for organizing and annotating candidates across team members.
 
 ## Who Uses Aegis
 
@@ -47,7 +49,7 @@ Not all researchers are the same. A clinical oncologist, a medicinal chemist, an
 
 ### Translational
 
-Translational researchers bridge basic science and clinical application. Their evidence comes primarily from PubMed publications, NIH and international grants, clinical trial participation, and citation metrics. The quality prior for this population emphasizes citation impact, funding, and translational output — the ability to move findings from bench to bedside.
+Translational researchers bridge basic science and clinical application. Their evidence comes primarily from PubMed publications, NIH grants and OpenAlex-indexed international grants, clinical trial participation, and citation metrics. The quality prior for this population emphasizes citation impact, funding, and translational output — the ability to move findings from bench to bedside.
 
 ### Drug Discovery
 

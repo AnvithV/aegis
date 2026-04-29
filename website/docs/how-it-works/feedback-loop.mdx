@@ -28,6 +28,13 @@ As downstream data accumulates and proves its reliability, it receives higher we
 
 The training set grows monotonically — new judgments are added but old ones are never removed. Over time, per-specialty exponents naturally diverge as different specialties accumulate different evidence distributions. A specialty with abundant downstream feedback may see its weights shift substantially from the cold-start values, while a specialty with limited data remains closer to the audit-panel-derived baseline.
 
+## Refit API
+
+Aegis exposes two endpoints for programmatic control of weight relearning:
+
+- **POST /v1/refit/trigger** — Triggers an immediate weight refit for a given specialty, bypassing the weekly cadence. Useful when a large batch of downstream feedback has been collected and the team wants to see updated rankings without waiting for the next scheduled cycle.
+- **GET /v1/refit/status** — Returns the current refit status including the active weight vector version, exponent values for each scoring component, and confidence interval half-widths. This endpoint provides visibility into when the last refit ran, whether it converged, and how confident the system is in the current weights.
+
 ## Cold Start
 
 When Aegis first launches or enters a new specialty, there is no downstream data to learn from. The cold-start strategy uses prior weights derived from audit-panel judgments. A cold-start guard prevents the learning pipeline from fitting weights when the judgment count is below a minimum threshold, ensuring that noisy early data does not produce unstable rankings. Until the threshold is met, the system uses the most recent stable weight vector.

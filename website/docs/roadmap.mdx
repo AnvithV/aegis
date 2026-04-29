@@ -12,33 +12,32 @@ title: Roadmap
 | 0 | Foundation | Complete | DuckDB schema, PubMed/RePORTER/CT.gov ingestion, two-tier identity resolution, NSCLC seed cohort, archetype validation |
 | 1 | Scoring | Complete | Quality prior (F1-F6), integrity gate, topical fit, recency, end-to-end ranker, audit panel, Plackett-Luce weight learning, observability |
 | 2 | Multi-Population | Complete | Drug-discovery (USPTO/EPO patents, CPC-MeSH, ChEMBL), clinician (NPI, ABMS, state boards, USNWR), F7 clinician score, per-population weight vectors, specialty classifier, cross-population merge |
-| 3 | Production | Complete | FastAPI + JWT auth, event-driven integrity ingestion, LLM query expansion, downstream feedback loop, geographic broadening (EPO/ERC/MRC/CIHR/KAKEN/NSFC), contestability workflow |
-| 4 | Frontend + Docs | In Progress | Next.js frontend (New Query, Results, Query History), Docusaurus documentation site |
+| 3 | Production | Complete | FastAPI + JWT auth, event-driven integrity ingestion, LLM query expansion, downstream feedback loop, contestability workflow |
+| 4 | Frontend + Docs | Complete | Next.js frontend (New Query, Results, Query History), Docusaurus documentation site |
+| 5 | Production Reality | Complete | OpenAlex integration replacing international grant sources, real F1-F7 scoring, query type classifier, SSE streaming, shortlists, candidate notes, deployment to Fly.io/Vercel |
+| 6 | Full Wiring | Complete | Live ingestion pipeline, feedback router, refit API, HITL review queue API, WeightSliderPanel with live re-ranking, frontend proxy routes for all new APIs |
+| 7 | Jobs System | Complete | Async pipeline (POST /v1/queries returns HTTP 202), JobStore with DuckDB, /jobs and /jobs/[id] frontend pages with 3-second polling, SSE source progress grid, job cancellation support |
 
 ## What Has Been Built
 
-Aegis is a fully operational researcher-ranking engine spanning 100 tasks across four completed phases:
+Aegis is a fully operational researcher-ranking engine spanning 100+ tasks across seven completed phases:
 
-- **25+ data sources** ingested across publications, grants, patents, clinical trials, clinician credentials, integrity databases, and taxonomy crosswalks
+- **20+ data sources** ingested across publications, grants, patents, clinical trials, clinician credentials, integrity databases, and taxonomy crosswalks
 - **Three researcher populations** — Translational, Drug Discovery, and Clinician — each with independent weight vectors learned from expert judgments
 - **Multi-component scoring** with quality prior (7 sub-score families), topical fit via MeSH vectors, recency with exponential decay, and a two-tier integrity gate
 - **Production API** with JWT authentication, rate limiting, audit logging, and evidence-trail responses
 - **Continuous learning** via downstream task-quality feedback (Fleiss kappa, accept rate, consensus rate) feeding into weekly Plackett-Luce weight refits
-- **International coverage** across 7 non-US source clients with per-region coverage diagnostics
 - **Identity resolution** unifying records across sources with deterministic and probabilistic linking
-
-## What Is In Progress
-
-Phase 4 is actively under development with two workstreams:
-
-- **Next.js Frontend:** A web application giving task managers a visual interface to submit specialty queries, explore ranked candidate lists with score breakdowns and evidence trails, and review query history. The frontend includes three core screens: New Query, Results, and Query History.
-- **Documentation Site:** The Docusaurus site you are currently reading, providing high-level documentation for engineers joining the team and internal stakeholders.
+- **Async job pipeline** that returns immediately and streams source-by-source progress via SSE
+- **Query type classifier** that automatically detects basic_research, drug_discovery, clinical_trial_pi, or policy_epi queries and loads appropriate weight vectors
+- **OpenAlex integration** for global publication and grant coverage, replacing six defunct international grant APIs
+- **Shortlists and notes** for organizing and annotating candidates across team members
+- **HITL review queue** for probabilistic identity match decisions
 
 ## What Comes Next
 
-The following areas represent planned future work beyond Phase 4:
+The following areas represent planned future work:
 
-- **additional populations:** Expanding beyond the current three populations to cover AI/ML researchers, biostatisticians, and regulatory affairs specialists. Each new population will require population-specific data sources, weight vectors, and audit panels.
-- **Deeper geographic coverage:** Increasing the non-US candidate ratio from the current ~15% toward 50%+ by adding additional international grant agencies, patent offices, and clinician registries beyond the initial seven non-US sources.
+- **Additional populations:** Expanding beyond the current three populations to cover AI/ML researchers, biostatisticians, and regulatory affairs specialists. Each new population will require population-specific data sources, weight vectors, and audit panels.
 - **Code and dataset artifacts:** Integrating repositories (GitHub), data archives (Zenodo), and genomic data repositories (GEO) as evidence sources for researchers whose primary output includes software, datasets, or genomic data rather than traditional publications.
 - **Enhanced feedback signals:** Expanding the downstream feedback loop to incorporate additional quality signals beyond Fleiss kappa, accept rate, and consensus rate — such as time-to-completion, revision frequency, and long-term outcome tracking.

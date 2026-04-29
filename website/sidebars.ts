@@ -5,6 +5,15 @@ const sidebars: SidebarsConfig = {
     'what-is-aegis',
     {
       type: 'category',
+      label: 'Using Aegis',
+      items: [
+        'using-aegis/submitting-a-query',
+        'using-aegis/monitoring-a-job',
+        'using-aegis/reading-results',
+      ],
+    },
+    {
+      type: 'category',
       label: 'How It Works',
       items: [
         'how-it-works/data-pipeline',
