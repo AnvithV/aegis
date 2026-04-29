@@ -57,18 +57,74 @@ class LlmExpansionConfig(BaseModel):
 
 
 class MetaMapExpander:
-    """Stub MetaMap expander for MeSH term extraction.
+    """MeSH term extractor via NLM MeSH Lookup API (no auth required).
 
-    This is a placeholder. Real MetaMap integration would use the
-    MetaMap API or UMLS REST API. For the initial implementation,
-    it extracts simple terms from the query.
+    Uses https://id.nlm.nih.gov/mesh/lookup/descriptor — the public NLM
+    linked-data endpoint backed by the same UMLS MeSH snapshot.
+
+    Upgrade path: when UMLS_API_KEY is available, swap this class for a
+    full UMLS REST client (uts.nlm.nih.gov/uts/rest/search) to get CUI
+    resolution and broader concept coverage.
     """
 
+    _BASE_URL = "https://id.nlm.nih.gov/mesh/lookup/descriptor"
+    _TIMEOUT = 5.0  # seconds per term lookup
+
     def expand(self, query: str) -> MetaMapResult:
-        """Extract simple terms from query (stub implementation)."""
-        words = [w.strip(".,;:!?()") for w in query.split()]
-        mesh_terms = [w.title() for w in words if len(w) > 3]
-        return MetaMapResult(mesh_terms=mesh_terms, confidence=0.5)
+        """Map query text to MeSH descriptors via NLM MeSH Lookup API."""
+        import httpx
+
+        candidates = self._extract_candidates(query)
+        mesh_terms: list[str] = []
+        seen: set[str] = set()
+
+        for term in candidates:
+            try:
+                resp = httpx.get(
+                    self._BASE_URL,
+                    params={"label": term, "match": "contains", "limit": 5},
+                    timeout=self._TIMEOUT,
+                )
+                if resp.status_code == 200:
+                    for item in resp.json():
+                        label = item.get("label", "")
+                        if label and label.lower() not in seen:
+                            seen.add(label.lower())
+                            mesh_terms.append(label)
+            except Exception:
+                logger.debug("MeSH lookup failed for term %r", term)
+
+        if not mesh_terms:
+            # Graceful degradation: fall back to title-cased words
+            words = [w.strip(".,;:!?()") for w in query.split()]
+            mesh_terms = [w.title() for w in words if len(w) > 3]
+            return MetaMapResult(mesh_terms=mesh_terms, confidence=0.3)
+
+        return MetaMapResult(mesh_terms=mesh_terms, confidence=0.8)
+
+    def _extract_candidates(self, query: str) -> list[str]:
+        """Extract candidate lookup terms: multi-word phrases + single tokens."""
+        query = query.strip()
+        words = [w.strip(".,;:!?()[]") for w in query.split() if len(w.strip(".,;:!?()[]")) > 2]
+
+        candidates: list[str] = []
+        # Full query first (best for exact phrases like "KRAS G12C")
+        candidates.append(query)
+        # Sliding bigrams
+        for i in range(len(words) - 1):
+            candidates.append(f"{words[i]} {words[i + 1]}")
+        # Individual tokens (skip stopwords)
+        _STOP = {"the", "for", "and", "with", "using", "from", "into", "that", "this", "are"}
+        candidates.extend(w for w in words if w.lower() not in _STOP)
+
+        # Deduplicate preserving order
+        seen: set[str] = set()
+        unique: list[str] = []
+        for c in candidates:
+            if c.lower() not in seen:
+                seen.add(c.lower())
+                unique.append(c)
+        return unique
 
 
 class LlmQueryExpander:

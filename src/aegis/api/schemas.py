@@ -140,3 +140,23 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str
     retry_after: int | None = None
+
+
+class ClassifyRequest(BaseModel):
+    """Request to classify a query and return detected type + weight vector."""
+
+    model_config = ConfigDict(frozen=True)
+
+    task_description: str
+
+
+class ClassifyResponse(BaseModel):
+    """Response with query classification and associated weight vector."""
+
+    model_config = ConfigDict(frozen=True)
+
+    query_type: str
+    confidence: float
+    keyword_matches: list[str]
+    weights: dict[str, float]
+    exponents: dict[str, float]

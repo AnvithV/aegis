@@ -95,6 +95,7 @@ class ResultFormatter:
         affiliations: dict[str, tuple[str, str | None]] | None = None,
         specialties: dict[str, str] | None = None,
         staleness_warnings: list[StalenessWarning] | None = None,
+        f_scores: dict[str, dict[str, float]] | None = None,
     ) -> QueryResponse:
         """Format a RankedList into a customer-facing QueryResponse."""
         query_id = uuid.uuid4().hex
@@ -138,12 +139,28 @@ class ResultFormatter:
                 specialty = specialties[rc.candidate_uuid]
 
             # Component scores
-            component_scores = {
+            component_scores: dict[str, float] = {
                 "quality_prior": rc.breakdown.quality_prior,
                 "topical_fit": rc.breakdown.topical_fit,
                 "recency": rc.breakdown.recency,
                 "integrity": rc.breakdown.integrity_score,
             }
+
+            # Add F1-F7 sub-scores if available
+            if f_scores:
+                _f_labels = {
+                    "f1": "f1_rcr",
+                    "f2": "f2_funding",
+                    "f3": "f3_leadership",
+                    "f4": "f4_apex",
+                    "f5": "f5_translational",
+                    "f6": "f6_lineage",
+                    "f7": "f7_clinician",
+                }
+                for family, label in _f_labels.items():
+                    family_scores = f_scores.get(family)
+                    if family_scores and rc.candidate_uuid in family_scores:
+                        component_scores[label] = family_scores[rc.candidate_uuid]
 
             candidates.append(
                 CandidateResult(

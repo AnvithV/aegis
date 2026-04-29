@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Population, QueryRequest } from "@/types/api";
+import type { Population, QueryRequest, QueryType, ClassifyResponse } from "@/types/api";
 import PopulationSelector from "./PopulationSelector";
 import KSlider from "./KSlider";
 import MeshTagInput from "./MeshTagInput";
+import QueryTypeBadge from "../results/QueryTypeBadge";
+import MeshExpansionInspector from "../results/MeshExpansionInspector";
+import WeightSliderPanel from "../results/WeightSliderPanel";
 
 export default function QueryForm() {
   const router = useRouter();
@@ -17,6 +20,50 @@ export default function QueryForm() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Classification state
+  const [classification, setClassification] = useState<ClassifyResponse | null>(null);
+  const [expandedTerms, setExpandedTerms] = useState<string[]>([]);
+  const [exponents, setExponents] = useState<Record<string, number>>({});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const classify = useCallback(async (text: string) => {
+    if (text.trim().length < 5) {
+      setClassification(null);
+      return;
+    }
+    try {
+      const res = await fetch("/api/queries/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_description: text }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as ClassifyResponse;
+        setClassification(data);
+        setExponents(data.exponents);
+        setExpandedTerms(data.keyword_matches);
+      }
+    } catch {
+      // Classification is best-effort; ignore errors
+    }
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      classify(taskDescription);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [taskDescription, classify]);
+
+  const handleTypeOverride = (type: QueryType) => {
+    if (classification) {
+      setClassification({ ...classification, query_type: type });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +86,10 @@ export default function QueryForm() {
         body.population = population;
       }
 
-      if (meshOverride.length > 0) {
-        body.mesh_override = meshOverride;
+      // Use expanded terms if available, otherwise mesh override
+      const terms = expandedTerms.length > 0 ? expandedTerms : meshOverride;
+      if (terms.length > 0) {
+        body.mesh_override = terms;
       }
 
       if (cutoffStrategy.trim()) {
@@ -58,8 +107,8 @@ export default function QueryForm() {
         throw new Error((errData as { error?: string }).error || `Request failed with status ${response.status}`);
       }
 
-      const data = await response.json() as { id: string };
-      router.push(`/results/${data.id}`);
+      const data = await response.json() as { job_id: string };
+      router.push(`/jobs/${data.job_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
@@ -76,9 +125,18 @@ export default function QueryForm() {
       )}
 
       <div>
-        <label htmlFor="task-description" className="block text-sm font-medium text-gray-700 mb-1">
-          Task Description <span className="text-red-500">*</span>
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label htmlFor="task-description" className="block text-sm font-medium text-gray-700">
+            Task Description <span className="text-red-500">*</span>
+          </label>
+          {classification && (
+            <QueryTypeBadge
+              queryType={classification.query_type}
+              confidence={classification.confidence}
+              onOverride={handleTypeOverride}
+            />
+          )}
+        </div>
         <textarea
           id="task-description"
           rows={5}
@@ -89,6 +147,17 @@ export default function QueryForm() {
           required
         />
       </div>
+
+      {classification && (
+        <div className="space-y-4">
+          <MeshExpansionInspector terms={expandedTerms} onTermsChange={setExpandedTerms} />
+          <WeightSliderPanel
+            weights={classification.weights}
+            exponents={exponents}
+            onExponentsChange={setExponents}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <PopulationSelector value={population} onChange={setPopulation} />

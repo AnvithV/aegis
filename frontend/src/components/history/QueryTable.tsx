@@ -5,9 +5,16 @@ import type { QuerySummary } from "@/types/api";
 
 interface QueryTableProps {
   queries: QuerySummary[];
+  onRerun?: (query: QuerySummary) => void;
 }
 
-export default function QueryTable({ queries }: QueryTableProps) {
+const POPULATION_COLORS: Record<string, string> = {
+  translational: "bg-blue-100 text-blue-800",
+  drug_discovery: "bg-purple-100 text-purple-800",
+  clinician: "bg-green-100 text-green-800",
+};
+
+export default function QueryTable({ queries, onRerun }: QueryTableProps) {
   if (queries.length === 0) {
     return (
       <div className="text-center py-12">
@@ -34,7 +41,7 @@ export default function QueryTable({ queries }: QueryTableProps) {
               Task Description
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Population
+              Type
             </th>
             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               K
@@ -58,8 +65,8 @@ export default function QueryTable({ queries }: QueryTableProps) {
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {query.population ? (
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                    {query.population.replace("_", " ")}
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${POPULATION_COLORS[query.population] ?? "bg-gray-100 text-gray-700"}`}>
+                    {query.population.replace(/_/g, " ")}
                   </span>
                 ) : (
                   <span className="text-gray-400">--</span>
@@ -71,13 +78,21 @@ export default function QueryTable({ queries }: QueryTableProps) {
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                 {query.result_count}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-right space-x-2">
                 <Link
                   href={`/results/${query.id}`}
                   className="text-blue-600 hover:text-blue-800 font-medium"
                 >
-                  View Results
+                  View
                 </Link>
+                {onRerun && (
+                  <button
+                    onClick={() => onRerun(query)}
+                    className="text-green-600 hover:text-green-800 font-medium"
+                  >
+                    Re-run
+                  </button>
+                )}
               </td>
             </tr>
           ))}

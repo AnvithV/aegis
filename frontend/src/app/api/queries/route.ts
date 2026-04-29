@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiFetch } from "@/lib/api-client";
-import type { QueryRequest, QueryResponse, QueryListResponse } from "@/types/api";
+import type { QueryRequest, QueryListResponse } from "@/types/api";
 
 export async function POST(request: NextRequest) {
   try {
-    const body: QueryRequest = await request.json();
-    const data = await apiFetch<QueryResponse>("/v1/queries", {
+    const body: QueryRequest & { query_type_override?: string } = await request.json();
+    const data = await apiFetch<{ job_id: string; status: string }>("/v1/queries", {
       method: "POST",
       body,
     });
-    return NextResponse.json(data);
+    return NextResponse.json({ job_id: data.job_id, status: data.status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

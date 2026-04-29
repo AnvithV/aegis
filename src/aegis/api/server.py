@@ -34,9 +34,7 @@ from aegis.api.schemas import (
     ClassifyRequest,
     ClassifyResponse,
     ErrorResponse,
-    ExpansionInfo,
     QueryRequest,
-    QueryResponse,
 )
 from aegis.api import feedback as feedback_mod
 from aegis.api import hitl as hitl_mod
@@ -46,8 +44,12 @@ from aegis.api.shortlists import router as shortlists_router
 from aegis.api.staleness import StalenessCircuitBreaker
 from aegis.api.streaming import close_stream, get_or_create_queue, push_event
 from aegis.api.streaming import router as streaming_router
+from aegis.api.jobs import router as jobs_router
+from aegis.storage.job_store import JobStore
 
 logger = logging.getLogger(__name__)
+
+_task_registry: dict[str, asyncio.Task[None]] = {}
 
 
 async def _background_refresh(interval_seconds: float) -> None:
@@ -105,6 +107,7 @@ def create_app(
     app.include_router(feedback_mod.router)
     app.include_router(refit_mod.router)
     app.include_router(hitl_mod.router)
+    app.include_router(jobs_router)
 
     # Initialize components with defaults
     _audit_log = AuditLog(
@@ -114,10 +117,151 @@ def create_app(
     _circuit_breaker = circuit_breaker or StalenessCircuitBreaker()
     _formatter = formatter or ResultFormatter()
 
+    async def _run_pipeline(
+        job_id: str,
+        body: QueryRequest,
+        customer: TokenPayload,
+    ) -> None:
+        """Run the full query pipeline in the background."""
+        start_time = time.monotonic()
+        job_store = JobStore()
+        try:
+            # 1. Check staleness
+            staleness_warnings = _circuit_breaker.check_all()
+
+            # 2. Execute the real pipeline
+            from aegis.pipeline.orchestrator import QueryPipeline, SourceProgress
+
+            pipeline = QueryPipeline()
+
+            query_id = job_id  # job_id IS the query_id for SSE + query store
+
+            def _progress_callback(progress: SourceProgress) -> None:
+                push_event(query_id, "source_progress", progress.model_dump())
+
+            pipeline_result = await pipeline.execute(
+                task_description=body.task_description,
+                mesh_override=body.mesh_override,
+                k=body.k,
+                progress_callback=_progress_callback,
+            )
+
+            # 3. Build affiliations dict from DuckDB candidates
+            from aegis.storage.candidate_store import CandidateStore
+
+            _store = CandidateStore()
+            all_candidates = _store.list_by_cohort(body.cohort_filter)
+            _store.close()
+
+            affiliations = {
+                c.uuid: (
+                    c.affiliations[0].canonical_name if c.affiliations else "Unknown",
+                    c.affiliations[0].country if c.affiliations else None,
+                )
+                for c in all_candidates
+            }
+
+            # 4. Build F-scores dict for formatter
+            f_scores: dict[str, dict[str, float]] = {
+                "f1": pipeline_result.f1_scores,
+                "f2": pipeline_result.f2_scores,
+                "f3": pipeline_result.f3_scores,
+                "f4": pipeline_result.f4_scores,
+                "f5": pipeline_result.f5_scores,
+                "f6": pipeline_result.f6_scores,
+            }
+            if pipeline_result.f7_scores is not None:
+                f_scores["f7"] = pipeline_result.f7_scores
+
+            # 5. Format response
+            response = _formatter.format(
+                ranked=pipeline_result.ranked_list,
+                expansion_info=pipeline_result.expansion_info,
+                variance_bands=pipeline_result.variance_bands,
+                affiliations=affiliations,
+                staleness_warnings=staleness_warnings,
+                f_scores=f_scores,
+            )
+
+            # Override query_id to match the job_id
+            response = response.model_copy(update={"query_id": query_id})
+
+            # 6. Audit log
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            _audit_log.append(
+                entry=AuditEntry(
+                    request_id=response.query_id,
+                    customer_id=customer.sub,
+                    customer_name=customer.customer_name,
+                    timestamp=datetime.now(UTC),
+                    endpoint="POST /v1/queries",
+                    query_text=body.task_description,
+                    expanded_mesh_terms=pipeline_result.expansion_info.expanded_mesh_terms,
+                    response_candidate_uuids=[
+                        c.candidate_uuid for c in response.candidates
+                    ],
+                    weight_version=pipeline_result.ranked_list.weight_version,
+                    integrity_rule_version=_formatter._integrity_rule_version,
+                    latency_ms=round(elapsed_ms, 2),
+                    status_code=200,
+                    cohort_filter=body.cohort_filter,
+                )
+            )
+
+            # 7. Store query in QueryStore (DuckDB)
+            from aegis.storage.query_store import QueryStore
+
+            try:
+                query_store = QueryStore()
+                query_store.save(
+                    query_id=response.query_id,
+                    task_description=body.task_description,
+                    query_type=pipeline_result.query_type,
+                    weight_vector_name=pipeline_result.weight_vector_name,
+                    mesh_terms=pipeline_result.expansion_info.expanded_mesh_terms,
+                    k=body.k,
+                    result_count=len(response.candidates),
+                    candidate_uuids=[c.candidate_uuid for c in response.candidates],
+                    candidate_scores=[c.model_dump() for c in response.candidates],
+                    pipeline_duration_ms=pipeline_result.pipeline_duration_ms,
+                    created_by=customer.sub,
+                )
+                query_store.close()
+            except Exception:
+                logger.exception("Failed to store query in QueryStore")
+
+            # 8. Push complete SSE event and close stream
+            push_event(query_id, "complete", {
+                "query_id": response.query_id,
+                "result_count": len(response.candidates),
+                "pipeline_duration_ms": pipeline_result.pipeline_duration_ms,
+            })
+            close_stream(query_id)
+
+            # 9. Update JobStore with success
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            job_store.update(
+                job_id,
+                status="complete",
+                completed_at=datetime.now(UTC).isoformat(),
+                duration_ms=round(elapsed_ms, 2),
+                candidate_count=len(response.candidates),
+                source_count=len(pipeline_result.source_progress),
+            )
+        except asyncio.CancelledError:
+            job_store.update(job_id, status="cancelled")
+            close_stream(job_id)
+        except Exception:
+            logger.exception("Pipeline failed for job %s", job_id)
+            job_store.update(job_id, status="failed")
+            close_stream(job_id)
+        finally:
+            job_store.close()
+            _task_registry.pop(job_id, None)
+
     @app.post(
         "/v1/queries",
-        response_model=QueryResponse,
-        status_code=status.HTTP_200_OK,
+        status_code=status.HTTP_202_ACCEPTED,
         responses={
             429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
             401: {"model": ErrorResponse, "description": "Authentication failed"},
@@ -127,10 +271,8 @@ def create_app(
     async def submit_query(
         body: QueryRequest,
         customer: TokenPayload = Depends(get_current_customer),
-    ) -> QueryResponse | JSONResponse:
-        """Submit a query for expert ranking."""
-        start_time = time.monotonic()
-
+    ) -> JSONResponse:
+        """Submit a query for expert ranking. Returns immediately with a job_id."""
         # 1. Cohort access check
         require_cohort_access(customer, body.cohort_filter)
 
@@ -157,127 +299,30 @@ def create_app(
                 },
             )
 
-        # 3. Check staleness
-        staleness_warnings = _circuit_breaker.check_all()
-
-        # 4. Execute the real pipeline
-        from aegis.pipeline.orchestrator import QueryPipeline, SourceProgress
-
-        pipeline = QueryPipeline()
-
-        # Pre-generate query_id for SSE streaming
+        # 3. Create job
         import uuid as uuid_mod
 
-        query_id = uuid_mod.uuid4().hex
-        get_or_create_queue(query_id)
-
-        def _progress_callback(progress: SourceProgress) -> None:
-            push_event(query_id, "source_progress", progress.model_dump())
-
-        try:
-            pipeline_result = await pipeline.execute(
-                task_description=body.task_description,
-                mesh_override=body.mesh_override,
-                k=body.k,
-                progress_callback=_progress_callback,
-            )
-        except Exception:
-            close_stream(query_id)
-            raise
-
-        # 5. Build affiliations dict from DuckDB candidates
-        from aegis.storage.candidate_store import CandidateStore
-
-        _store = CandidateStore()
-        all_candidates = _store.list_by_cohort(body.cohort_filter)
-        _store.close()
-
-        affiliations = {
-            c.uuid: (
-                c.affiliations[0].canonical_name if c.affiliations else "Unknown",
-                c.affiliations[0].country if c.affiliations else None,
-            )
-            for c in all_candidates
-        }
-
-        # 6. Build F-scores dict for formatter
-        f_scores: dict[str, dict[str, float]] = {
-            "f1": pipeline_result.f1_scores,
-            "f2": pipeline_result.f2_scores,
-            "f3": pipeline_result.f3_scores,
-            "f4": pipeline_result.f4_scores,
-            "f5": pipeline_result.f5_scores,
-            "f6": pipeline_result.f6_scores,
-        }
-        if pipeline_result.f7_scores is not None:
-            f_scores["f7"] = pipeline_result.f7_scores
-
-        # 7. Format response
-        response = _formatter.format(
-            ranked=pipeline_result.ranked_list,
-            expansion_info=pipeline_result.expansion_info,
-            variance_bands=pipeline_result.variance_bands,
-            affiliations=affiliations,
-            staleness_warnings=staleness_warnings,
-            f_scores=f_scores,
+        job_id = uuid_mod.uuid4().hex
+        job_store = JobStore()
+        job_store.create(
+            job_id=job_id,
+            query_text=body.task_description,
+            created_by=customer.sub,
         )
+        job_store.close()
 
-        # Override query_id to match the one we pre-generated for SSE
-        response = response.model_copy(update={"query_id": query_id})
+        # 4. Set up SSE queue
+        get_or_create_queue(job_id)
 
-        # 8. Audit log
-        elapsed_ms = (time.monotonic() - start_time) * 1000
-        _audit_log.append(
-            entry=AuditEntry(
-                request_id=response.query_id,
-                customer_id=customer.sub,
-                customer_name=customer.customer_name,
-                timestamp=datetime.now(UTC),
-                endpoint="POST /v1/queries",
-                query_text=body.task_description,
-                expanded_mesh_terms=pipeline_result.expansion_info.expanded_mesh_terms,
-                response_candidate_uuids=[
-                    c.candidate_uuid for c in response.candidates
-                ],
-                weight_version=pipeline_result.ranked_list.weight_version,
-                integrity_rule_version=_formatter._integrity_rule_version,
-                latency_ms=round(elapsed_ms, 2),
-                status_code=200,
-                cohort_filter=body.cohort_filter,
-            )
+        # 5. Launch background pipeline
+        task = asyncio.create_task(_run_pipeline(job_id, body, customer))
+        _task_registry[job_id] = task
+
+        # 6. Return immediately
+        return JSONResponse(
+            content={"job_id": job_id, "status": "in_progress"},
+            status_code=202,
         )
-
-        # 9. Store query in QueryStore (DuckDB)
-        from aegis.storage.query_store import QueryStore
-
-        try:
-            query_store = QueryStore()
-            query_store.save(
-                query_id=response.query_id,
-                task_description=body.task_description,
-                query_type=pipeline_result.query_type,
-                weight_vector_name=pipeline_result.weight_vector_name,
-                mesh_terms=pipeline_result.expansion_info.expanded_mesh_terms,
-                k=body.k,
-                result_count=len(response.candidates),
-                candidate_uuids=[c.candidate_uuid for c in response.candidates],
-                candidate_scores=[c.model_dump() for c in response.candidates],
-                pipeline_duration_ms=pipeline_result.pipeline_duration_ms,
-                created_by=customer.sub,
-            )
-            query_store.close()
-        except Exception:
-            logger.exception("Failed to store query in QueryStore")
-
-        # 10. Push complete SSE event and close stream
-        push_event(query_id, "complete", {
-            "query_id": response.query_id,
-            "result_count": len(response.candidates),
-            "pipeline_duration_ms": pipeline_result.pipeline_duration_ms,
-        })
-        close_stream(query_id)
-
-        return response
 
     @app.post("/v1/queries/classify")
     def classify_query(body: ClassifyRequest) -> ClassifyResponse:

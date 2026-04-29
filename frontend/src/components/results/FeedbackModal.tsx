@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import type { FeedbackRequest } from "@/types/api";
+import type { FeedbackRequest, FeedbackCandidate } from "@/types/api";
 
 interface FeedbackModalProps {
   queryId: string;
   onClose: () => void;
   onSuccess: () => void;
+  querySpecialty: string;
+  meshTerms: string[];
+  candidates: FeedbackCandidate[];
 }
 
-export default function FeedbackModal({ queryId, onClose, onSuccess }: FeedbackModalProps) {
+export default function FeedbackModal({ queryId, onClose, onSuccess, querySpecialty, meshTerms, candidates }: FeedbackModalProps) {
   const [fleissKappa, setFleissKappa] = useState("");
   const [acceptRate, setAcceptRate] = useState("");
   const [consensusRate, setConsensusRate] = useState("");
@@ -30,6 +33,9 @@ export default function FeedbackModal({ queryId, onClose, onSuccess }: FeedbackM
 
     try {
       const body: FeedbackRequest = {
+        query_specialty: querySpecialty,
+        query_mesh_terms: meshTerms,
+        candidates: candidates,
         fleiss_kappa: validateRange(fleissKappa, "Fleiss Kappa"),
         accept_rate: validateRange(acceptRate, "Accept Rate"),
         consensus_rate: validateRange(consensusRate, "Consensus Rate"),

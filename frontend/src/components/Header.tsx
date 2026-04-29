@@ -8,7 +8,9 @@ export default function Header() {
 
   const navItems = [
     { href: "/", label: "New Query" },
+    { href: "/jobs", label: "Jobs" },
     { href: "/history", label: "Query History" },
+    { href: "/shortlists", label: "Shortlists" },
   ];
 
   return (
