@@ -56,6 +56,8 @@ class ProbabilisticLinker:
         self,
         artifact_features: dict[str, Any],
         registry: CandidateRegistry,
+        *,
+        candidates: list[Any] | None = None,
     ) -> LinkResult:
         """Link an artifact to the best matching candidate.
 
@@ -66,8 +68,12 @@ class ProbabilisticLinker:
           - coauthors: list[str] (co-author names)
           - mesh_terms: list[str] (MeSH descriptors)
           - year: int | None (publication year)
+
+        Pass ``candidates`` to avoid a DB scan (e.g. when the caller
+        maintains an in-memory snapshot of the candidate store).
         """
-        candidates = self._store.list_by_cohort()
+        if candidates is None:
+            candidates = self._store.list_by_cohort()
         if not candidates:
             return LinkResult(
                 candidate_uuid=None,

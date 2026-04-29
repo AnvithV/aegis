@@ -45,14 +45,26 @@ _Fix:_ `openalex.py / _parse_work` — extract PMID from `ids.pmid` and store it
 `converters.py / openalex_work_to_candidates` — populate `ArtifactRefBundle.pmids` with the PMID
 when present, so identity linkage and F1 scoring work correctly.
 
-**4. No identity cross-linking across sources (unresolved)**
-A researcher who appears as both a CT.gov PI and a PubMed author is stored as two separate
-candidates with different UUIDs because CT.gov investigator records rarely carry an ORCID or
-ERA Commons ID. The PubMed version scores well; the CT.gov version scores near zero. They are
-never merged by the Fellegi-Sunter linker.
+**4. Probabilistic identity linker built but not wired into ingestion**
+`src/aegis/identity/probabilistic.py` contains a complete Fellegi-Sunter linker that matches
+candidates by name + affiliation + MeSH overlap. However `RecordIngester._find_existing` only
+performs exact strong-key lookups (ORCID, ERA Commons ID). When no strong key is present —
+which is the case for CT.gov investigators and most OpenAlex authors — a new duplicate
+candidate is created instead of merging with an existing PubMed record.
 
-_Status:_ Not fixed. Requires a name+affiliation fuzzy-match pass during ingestion, or
-explicit ORCID lookup for CT.gov investigators via the ORCID API.
+The result: a researcher who is a CT.gov PI and a PubMed author lives as two separate
+candidates. The PubMed version scores well; the CT.gov version scores near zero.
+
+_Status:_ **Fixed (wired).** `RecordIngester` now calls `ProbabilisticLinker.link()` as a
+fallback when no strong-key match is found. Candidates are loaded into memory once at init
+so the linker does not hit the DB on every record.
+
+Remaining limitation: `affiliation_similarity` is always 0 unless the raw affiliation string
+resolves to a ROR ID, which rarely happens for CT.gov investigators. As a result, the linker
+correctly identifies matches (tested: Matched=True) but scores them in the "review" zone
+(0.51) rather than "auto-link" (≥0.95). The 0.95 threshold was calibrated for ORCID + ROR +
+co-author rich data. Next step: lower `auto_link` threshold to ~0.80 for name-dominant cases,
+or pre-resolve affiliations to ROR IDs before ingestion.
 
 ### Files Changed
 | File | Change |
