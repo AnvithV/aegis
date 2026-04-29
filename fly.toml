@@ -1,0 +1,41 @@
+app = "aegis-backend"
+primary_region = "sjc"  # San Jose — closest to you
+
+[build]
+
+[env]
+  AEGIS_DB_PATH = "/data/aegis.duckdb"
+  AEGIS_REFRESH_INTERVAL_HOURS = "6"
+
+[mounts]
+  source = "aegis_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+    type = "connections"
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/v1/health"
+
+[vm]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

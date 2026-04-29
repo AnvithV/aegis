@@ -1,0 +1,18 @@
+version: 1
+specialty: policy_epi
+created: "2026-04-27"
+weights:
+  f1_rcr: 0.25
+  f2_funding: 0.20
+  f3_leadership: 0.25
+  f4_apex: 0.10
+  f5_translational: 0.15
+  f6_lineage: 0.05
+exponents:
+  alpha: 0.6
+  beta: 1.2
+  gamma: 0.5
+exponent_bounds:
+  alpha: [0.3, 1.2]
+  beta: [0.5, 1.5]
+  gamma: [0.1, 0.8]

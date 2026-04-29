@@ -54,7 +54,7 @@ def _parse_grant(data: dict[str, Any]) -> GrantRecord:
     pis: list[GrantPI] = []
     for pi_data in data.get("principal_investigators") or []:
         full_name = pi_data.get("full_name") or ""
-        era_id = pi_data.get("profile_id") or ""
+        era_id = str(pi_data.get("profile_id") or "")
         if not era_id:
             era_id = str(pi_data.get("era_commons_id", ""))
         orcid = pi_data.get("orcid") or None
