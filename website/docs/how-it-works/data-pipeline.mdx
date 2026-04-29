@@ -5,11 +5,25 @@ title: Data Pipeline
 
 # Data Pipeline
 
-Aegis ingests data from approximately 25 sources covering publications, grants, patents, clinical trials, clinician credentials, integrity records, and taxonomy crosswalks. The ingestion layer is the foundation of everything downstream — scoring, integrity checks, and ranking all depend on having fresh, well-structured data from these sources.
+Aegis ingests data from approximately 20 sources covering publications, grants, patents, clinical trials, clinician credentials, integrity records, and taxonomy crosswalks. The ingestion layer is the foundation of everything downstream — scoring, integrity checks, and ranking all depend on having fresh, well-structured data from these sources.
 
 ## Source Clients
 
 Each data source has a dedicated typed API client built with httpx for HTTP transport, Pydantic for response validation, and a configurable retry policy for transient failures. Every client returns strongly typed records — a PubMed client returns publication records with authors, MeSH descriptors, and publication dates; a USPTO client returns patent records with inventor names and CPC classifications. This typed approach catches data-quality issues at the ingestion boundary rather than letting malformed data propagate into scoring.
+
+## Async Query Pipeline
+
+When a user submits a query via POST /v1/queries, the API returns HTTP 202 immediately with a job ID and status. The pipeline then runs asynchronously, fetching from five sources in parallel:
+
+1. **PubMed** — biomedical publications with MeSH descriptors
+2. **NIH RePORTER** — US federal research grants
+3. **ClinicalTrials.gov** — clinical trial registrations with investigator roles
+4. **OpenAlex Works** — global scholarly publications with author disambiguation
+5. **OpenAlex Grants** — international grant funding data
+
+Each source is capped at 200 records per query to keep response times reasonable. Progress updates stream to the frontend via Server-Sent Events (SSE), showing source-by-source status (pending, fetching, complete, or failed). A typical query produces approximately 360 candidates after identity resolution and deduplication.
+
+The pipeline orchestrator manages source fetching, record conversion via ingestion converters, identity resolution, scoring, and ranking — all within a single asyncio task that can be cancelled via `POST /v1/jobs/{id}/cancel`.
 
 ## Ingestion Cadence
 
@@ -17,9 +31,9 @@ Not all sources change at the same rate, so Aegis uses three ingestion tiers:
 
 - **Event-driven (less than 6 hours):** Integrity sources — Retraction Watch, ORI, OFAC/SAM, and LEIE — are ingested as quickly as possible. When a researcher is sanctioned, debarred, or found to have committed fraud, that information must flow into the integrity gate before the next ranking query. These sources are polled on short intervals with change-detection logic to minimize unnecessary processing.
 
-- **Daily:** Preprint servers — bioRxiv and medRxiv — publish new submissions every day. Daily ingestion ensures that active researchers producing preprints are reflected in recency and topical-fit scores without waiting for the weekly cycle.
+- **Daily:** Integrity sources continue on short polling cycles. Other high-frequency sources are batched daily.
 
-- **Weekly:** The majority of sources — PubMed, NIH RePORTER, USPTO PatentsView, EPO, ClinicalTrials.gov, NPI, ABMS, and others — are refreshed on a weekly cadence. These sources update less frequently or have bulk-download mechanisms that align naturally with weekly batch processing.
+- **Weekly:** The majority of sources — PubMed, NIH RePORTER, USPTO PatentsView, OpenAlex, ClinicalTrials.gov, NPI, ABMS, and others — are refreshed on a weekly cadence. These sources update less frequently or have bulk-download mechanisms that align naturally with weekly batch processing.
 
 ## Storage
 

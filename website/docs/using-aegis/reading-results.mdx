@@ -1,0 +1,75 @@
+---
+sidebar_position: 3
+title: Reading Results
+---
+
+# Reading Results
+
+The Results page displays ranked candidates with composite scores, evidence trails, and collaboration features.
+
+## Results Header
+
+At the top of the results page you will find:
+
+- **Query Type Badge** -- Shows the detected query type (e.g., `drug_discovery`) and confidence level.
+- **Task Description** -- The original query text.
+- **Metadata** -- Population type, K value, total candidate count, and query timestamp.
+- **Submit Feedback** button -- Opens the feedback modal for quality signals.
+
+## Weight Sliders
+
+Three exponent sliders let you re-balance the ranking in real time:
+
+| Slider | Controls | Effect |
+|---|---|---|
+| Alpha | Quality Prior | How much publication quality, citation impact, and grant history influence rank |
+| Beta | Topical Fit | How closely a candidate's work must match the query MeSH terms |
+| Gamma | Recency | How much recent activity is favored over historical track record |
+
+Adjusting any slider triggers **immediate client-side re-ranking** -- no round-trip to the server. Click **"Reset to trained"** to restore the weight vector selected by the query type classifier.
+
+## Candidate List
+
+Each row in the candidate list shows:
+
+- **Rank** -- Position in the current ranking.
+- **Name and Affiliation** -- Candidate's name and primary institution.
+- **Composite Score** -- The overall ranking score.
+- **Component Scores** -- Individual scores for Quality (Q), Topical Fit (C), Recency (R), and Integrity (I).
+- **Linkage Confidence** -- How confident the identity resolution system is that records belong to this person.
+- **Team Indicators** -- Icons showing whether the candidate is on a shortlist or has analyst notes attached.
+- **Comparison Toggle** -- Checkbox to select candidates for side-by-side comparison.
+
+## Evidence Trail
+
+Expand any candidate row to reveal the evidence trail. This panel shows the raw data backing each score:
+
+- **Publications** -- PubMed IDs with titles and journal information.
+- **iCite RCR Scores** -- Relative Citation Ratio for each publication, indicating field-normalized impact.
+- **Grants** -- NIH and international grant awards with project titles and funding periods.
+- **Clinical Trials** -- NCT-registered trials where the candidate is listed as investigator.
+- **Narrative Evidence** -- Additional context from source records.
+
+Filter the evidence by source using the tabs: **All** | **PubMed** | **iCite** | **NIH Grants** | **Trials** | **Notes**.
+
+## Geographic Coverage Warning
+
+When more than 75% of candidates share the same geographic region, a yellow banner appears at the top of the results. This alerts task managers to potential geographic bias so they can broaden their search or adjust MeSH terms.
+
+## Candidate Comparison
+
+To compare candidates side by side:
+
+1. Check the comparison toggle on two or more candidate rows.
+2. Click the **Compare** button that appears.
+3. A modal opens with a side-by-side view of selected candidates, showing scores, component breakdowns, and key evidence for each.
+
+## Feedback Modal
+
+Click **Submit Feedback** in the results header to open the feedback modal. This form captures quality signals that feed into downstream weight relearning:
+
+- **Query Specialty** -- The medical specialty context for this search.
+- **MeSH Terms** -- The terms used for this query (pre-filled, editable).
+- **Per-Candidate Assessments** -- For each candidate, indicate whether they were a good match, acceptable, or poor fit.
+
+Submitted feedback flows into the Plackett-Luce weight relearning pipeline, improving future rankings for similar queries.
