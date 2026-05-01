@@ -1,0 +1,296 @@
+---
+title: Queries
+sidebar_label: Queries
+---
+
+# Queries
+
+Queries are the core resource. Submitting a query kicks off the full ingestion and ranking pipeline asynchronously and returns a `job_id` immediately.
+
+---
+
+## POST /v1/queries
+
+Submit a new expert-discovery query. Returns a `job_id` immediately (HTTP 202); the pipeline runs in the background.
+
+**Auth required:** Yes
+
+### Request Body
+
+```json
+{
+  "task_description": "KRAS G12C inhibitor medicinal chemist with ADMET experience",
+  "k": 20,
+  "mesh_override": ["Neoplasms", "Proto-Oncogene Proteins p21(ras)"],
+  "cohort_filter": null,
+  "cutoff_strategy": "top_k",
+  "score_threshold": null,
+  "include_variance_bands": true
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `task_description` | `string` | ✅ | — | Natural-language description of the expertise needed. Minimum 10 characters. Drives MeSH expansion, query classification, and topical-fit scoring. |
+| `k` | `integer` | ❌ | `50` | Number of ranked candidates to return. Range: 1–500. |
+| `mesh_override` | `string[]` | ❌ | `null` | Explicit MeSH terms to use instead of automatic expansion. If provided and non-empty, LLM/MetaMap expansion is skipped entirely. |
+| `cohort_filter` | `string` | ❌ | `null` | Restrict scoring to a specific candidate cohort. Must be in the token's `allowed_cohorts` if that field is set. |
+| `cutoff_strategy` | `"top_k" \| "score_threshold"` | ❌ | `"top_k"` | How to cut the result set. `top_k` returns exactly K results. `score_threshold` returns all candidates above `score_threshold` up to K. |
+| `score_threshold` | `float` | ❌ | `null` | Required when `cutoff_strategy` is `"score_threshold"`. Candidates with composite score below this value are excluded. |
+| `include_variance_bands` | `boolean` | ❌ | `true` | Whether to compute bootstrap variance bands (200 Monte Carlo samples). Adds ~0.5 s to pipeline runtime. |
+
+### Response — 202 Accepted
+
+```json
+{
+  "job_id": "a3f2c1d0e8b947f6a2c3d4e5f6a7b8c9",
+  "status": "in_progress"
+}
+```
+
+Use the `job_id` to poll `GET /v1/jobs/\{job_id\}` or stream progress from `GET /v1/queries/\{job_id\}/stream`.
+
+### Errors
+
+| Status | Condition |
+|--------|-----------|
+| `400` | `task_description` shorter than 10 characters, or `k` out of range |
+| `401` | Invalid or missing token |
+
+---
+
+## POST /v1/queries/classify
+
+Classify a query and return the detected query type, confidence score, matched keywords, and the weight vector that would be applied. This is called live by the frontend as you type (debounced at 300 ms) to power the query-type badge and weight-slider preview.
+
+**Auth required:** Yes
+
+### Request Body
+
+```json
+{
+  "task_description": "Phase 2 clinical trial investigator for KRAS lung cancer"
+}
+```
+
+### Response — 200 OK
+
+```json
+{
+  "query_type": "clinical_trial_pi",
+  "confidence": 0.8,
+  "keyword_matches": ["clinical trial", "phase 2"],
+  "weights": {
+    "f1_rcr": 0.15,
+    "f2_funding": 0.10,
+    "f3_leadership": 0.25,
+    "f4_apex": 0.05,
+    "f5_translational": 0.15,
+    "f6_lineage": 0.05,
+    "f7_clinician": 0.25
+  },
+  "exponents": {
+    "alpha": 0.7,
+    "beta": 1.0,
+    "gamma": 0.4
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `query_type` | One of `basic_research`, `drug_discovery`, `clinical_trial_pi`, `policy_epi` |
+| `confidence` | 0.5 when no keywords match (default fallback); increases by 0.1 per matched keyword, capped at 0.95 |
+| `keyword_matches` | The specific keyword strings from the query that triggered the classification |
+| `weights` | F1–F7 family weights for the selected weight vector. Sums to 1.0. |
+| `exponents` | Default α (quality), β (topical fit), γ (recency) for the ranking formula |
+
+### Query Types
+
+| Type | Triggered by | Dominant weight |
+|------|-------------|-----------------|
+| `basic_research` | Default — no matching keywords | F1 RCR (40%) |
+| `drug_discovery` | `inhibitor`, `ic50`, `sar`, `admet`, `compound`, `lead optimization`, … | F5 Translational (50%) |
+| `clinical_trial_pi` | `clinical trial`, `phase 2`, `randomized`, `irb`, `enrollment`, … | F3 Leadership + F7 Clinician (25% each) |
+| `policy_epi` | `epidemiology`, `incidence`, `prevalence`, `social determinants`, … | F1 + F3 Leadership balanced |
+
+---
+
+## GET /v1/queries
+
+List past queries for the authenticated customer, newest first.
+
+**Auth required:** Yes
+
+### Query Parameters
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | `integer` | `1` | Page number (1-indexed) |
+| `per_page` | `integer` | `20` | Results per page |
+
+### Response — 200 OK
+
+```json
+{
+  "queries": [
+    {
+      "id": "a3f2c1d0e8b947f6a2c3d4e5f6a7b8c9",
+      "task_description": "KRAS G12C inhibitor drug discovery",
+      "query_type": "drug_discovery",
+      "k": 20,
+      "result_count": 20,
+      "created_at": "2026-04-29T14:32:00Z",
+      "custom_name": null
+    }
+  ],
+  "total": 47,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+---
+
+## GET /v1/queries/\{query_id\}
+
+Retrieve the full result of a completed query, including all ranked candidates and their scores.
+
+**Auth required:** Yes
+
+### Path Parameters
+
+| Param | Description |
+|-------|-------------|
+| `query_id` | The `job_id` returned when the query was submitted |
+
+### Response — 200 OK
+
+```json
+{
+  "id": "a3f2c1d0e8b947f6a2c3d4e5f6a7b8c9",
+  "task_description": "KRAS G12C inhibitor drug discovery",
+  "k": 20,
+  "query_type": "drug_discovery",
+  "result_count": 20,
+  "created_at": "2026-04-29T14:32:00Z",
+  "mesh_override": ["Neoplasms", "Proto-Oncogene Proteins p21(ras)"],
+  "cutoff_strategy": null,
+  "population": null,
+  "candidates": [
+    {
+      "rank": 1,
+      "candidate_uuid": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+      "candidate_name": "Jane Smith",
+      "affiliation": "Dana-Farber Cancer Institute",
+      "affiliation_country": "US",
+      "score": 0.847,
+      "component_scores": {
+        "Q": 0.91,
+        "T": 0.88,
+        "R": 0.76,
+        "I": 1.0
+      },
+      "top_artifacts": [
+        {
+          "artifact_type": "pmid",
+          "identifier": "33521700",
+          "title": "Sotorasib for Lung Cancers with KRAS p.G12C",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/33521700",
+          "contribution_score": 0.43
+        }
+      ],
+      "linkage_confidence": 0.85,
+      "variance_band": {
+        "low": 0.79,
+        "median": 0.85,
+        "high": 0.91
+      },
+      "integrity_disclosures": [],
+      "specialty": "drug_discovery",
+      "evidence_trail": [
+        "Published 'Sotorasib for Lung Cancers with KRAS p.G12C' (PMID:33521700, 2021-05-20)"
+      ]
+    }
+  ]
+}
+```
+
+#### `component_scores` fields
+
+| Key | Meaning |
+|-----|---------|
+| `Q` | Quality percentile (composite of F1–F7 weighted by the selected vector) |
+| `T` | Topical fit (0–1, how well the candidate's evidence matches the query) |
+| `R` | Recency (0–1, decaying over 5 years from last source update) |
+| `I` | Integrity (1.0 unless a hard-gate rule zeroed this candidate) |
+
+### Errors
+
+| Status | Condition |
+|--------|-----------|
+| `404` | No query with that ID exists, or it belongs to a different customer |
+
+---
+
+## GET /v1/queries/\{query_id\}/stream
+
+Stream real-time source-fetch progress as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events). Connect immediately after submitting a query to see each data source report in as it finishes.
+
+**Auth required:** Yes (token sent in header, not URL)
+
+### Path Parameters
+
+| Param | Description |
+|-------|-------------|
+| `query_id` | The `job_id` returned when the query was submitted |
+
+### Event Types
+
+#### `source_progress`
+
+Emitted once per data source as soon as that source finishes fetching. Sources run in parallel so events arrive out-of-order and in quick succession.
+
+```
+event: source_progress
+data: {"source_name":"pubmed","status":"complete","record_count":200,"latency_ms":4312.5,"error":null}
+```
+
+```
+event: source_progress
+data: {"source_name":"ctgov","status":"failed","record_count":0,"latency_ms":1200.0,"error":"HTTPStatusError: 503"}
+```
+
+| Field | Description |
+|-------|-------------|
+| `source_name` | One of `pubmed`, `reporter`, `ctgov`, `openalex_works` |
+| `status` | `"complete"` or `"failed"` |
+| `record_count` | Number of records fetched (capped at 200 per source) |
+| `latency_ms` | Wall-clock time for the fetch |
+| `error` | `null` on success; error string on failure |
+
+#### `complete`
+
+Emitted when the entire pipeline finishes (all sources ingested, scoring and ranking done, results written to DB).
+
+```
+event: complete
+data: {}
+```
+
+After receiving `complete`, call `GET /v1/queries/\{query_id\}` for the full results.
+
+#### `timeout`
+
+Emitted if no events arrive within 300 seconds (should not occur in normal operation).
+
+```
+event: timeout
+data: {}
+```
+
+### Notes
+
+- The SSE queue is pre-created when `POST /v1/queries` is called, so events are buffered even if the client hasn't connected yet. Connecting immediately after the 202 response guarantees no events are missed.
+- The Vercel proxy route for this endpoint has `maxDuration = 300` to support pipelines that take up to 5 minutes.
+- On error (`EventSource` fires `onerror`), the pipeline continues running; poll `GET /v1/jobs/\{job_id\}` to check final status.

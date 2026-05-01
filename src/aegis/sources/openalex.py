@@ -13,45 +13,11 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from aegis.sources.non_us_grants import NonUsGrantRecord
 from aegis.sources.retry import RetryConfig, RetryPolicy
 
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.openalex.org"
-
-# Known funder OpenAlex IDs for international grant agencies.
-FUNDER_IDS: dict[str, str] = {
-    "ERC": "F4320332161",
-    "MRC": "F4320332084",
-    "CIHR": "F4320332083",
-    "KAKEN": "F4320332085",
-    "JSPS": "F4320332085",
-    "NSFC": "F4320332086",
-    "Wellcome": "F4320332082",
-}
-
-# Maps funder short-name to country ISO code.
-_FUNDER_COUNTRY: dict[str, str] = {
-    "ERC": "EU",
-    "MRC": "GB",
-    "CIHR": "CA",
-    "KAKEN": "JP",
-    "JSPS": "JP",
-    "NSFC": "CN",
-    "Wellcome": "GB",
-}
-
-# Maps funder short-name to currency.
-_FUNDER_CURRENCY: dict[str, str] = {
-    "ERC": "EUR",
-    "MRC": "GBP",
-    "CIHR": "CAD",
-    "KAKEN": "JPY",
-    "JSPS": "JPY",
-    "NSFC": "CNY",
-    "Wellcome": "GBP",
-}
 
 
 class OpenAlexWork(BaseModel):
@@ -369,116 +335,6 @@ class OpenAlexClient:
             country_code=data.get("country_code"),
             grants_count=data.get("grants_count", 0),
             works_count=data.get("works_count", 0),
-            raw_json=json.dumps(data),
-        )
-
-    async def get_grants_by_funder(
-        self,
-        funder_id: str,
-        since_year: int | None = None,
-    ) -> AsyncIterator[NonUsGrantRecord]:
-        """Get grants for a funder, returning NonUsGrantRecord for compatibility.
-
-        ``funder_id`` can be a known short-name (e.g. "ERC") or a full
-        OpenAlex funder ID (e.g. "F4320332161").
-        """
-        # Resolve short-name to OpenAlex funder ID if needed
-        resolved_id = FUNDER_IDS.get(funder_id, funder_id)
-        funder_label = funder_id if funder_id in FUNDER_IDS else "OpenAlex"
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            cursor = "*"
-            while cursor:
-                filter_parts = [f"grants.funder:{resolved_id}"]
-                if since_year is not None:
-                    filter_parts.append(
-                        f"from_publication_date:{since_year}-01-01"
-                    )
-                params: dict[str, Any] = {
-                    "filter": ",".join(filter_parts),
-                    "per_page": 200,
-                    "cursor": cursor,
-                }
-                data = await self._get_json(client, "/works", params)
-                results = data.get("results") or []
-                if not results:
-                    break
-
-                for item in results:
-                    record = self._work_to_grant(item, funder_label, resolved_id)
-                    if record is not None:
-                        yield record
-
-                meta = data.get("meta") or {}
-                cursor = meta.get("next_cursor")
-                if cursor is None:
-                    break
-
-    @staticmethod
-    def _work_to_grant(
-        data: dict[str, Any],
-        funder_label: str,
-        funder_id: str,
-    ) -> NonUsGrantRecord | None:
-        """Convert an OpenAlex work with grant info into a NonUsGrantRecord."""
-        # Find the matching grant object
-        grant_ref = data.get("id", "")
-        for g in data.get("grants") or []:
-            gf = g.get("funder") or ""
-            if funder_id in gf:
-                award_id = g.get("award_id")
-                if award_id:
-                    grant_ref = f"{funder_label}-{award_id}"
-                break
-
-        title = data.get("title") or ""
-
-        # PI names from authorships
-        pi_names: list[str] = []
-        pi_orcids: list[str | None] = []
-        for a in data.get("authorships") or []:
-            author_info = a.get("author") or {}
-            name = author_info.get("display_name")
-            if name:
-                pi_names.append(name)
-                orcid_raw = author_info.get("orcid")
-                if orcid_raw and "/" in str(orcid_raw):
-                    pi_orcids.append(str(orcid_raw).rsplit("/", 1)[-1])
-                else:
-                    pi_orcids.append(orcid_raw)
-
-        # Publication date
-        start_date: date | None = None
-        pub_date_str = data.get("publication_date")
-        if pub_date_str:
-            try:
-                start_date = date.fromisoformat(str(pub_date_str)[:10])
-            except (ValueError, TypeError):
-                pass
-
-        # Subject areas from concepts
-        subject_areas: list[str] = []
-        for c in data.get("concepts") or []:
-            name = c.get("display_name")
-            if name:
-                subject_areas.append(name)
-
-        funder_country = _FUNDER_COUNTRY.get(funder_label, "")
-        currency = _FUNDER_CURRENCY.get(funder_label)
-
-        return NonUsGrantRecord(
-            grant_reference=grant_ref,
-            funder=funder_label,
-            funder_country=funder_country,
-            title=title,
-            pi_names=pi_names,
-            pi_orcids=pi_orcids,
-            amount_local=None,
-            currency=currency,
-            start_date=start_date,
-            end_date=None,
-            subject_areas=subject_areas,
-            source="openalex",
             raw_json=json.dumps(data),
         )
 

@@ -306,18 +306,10 @@ class LlmQueryExpander:
                     expanded_at=now,
                 )
 
-            # Merge LLM + MetaMap terms (LLM first, deduplicated)
-            seen: set[str] = set()
-            merged: list[str] = []
-            for term in valid_terms + metamap_result.mesh_terms:
-                lower = term.lower()
-                if lower not in seen:
-                    seen.add(lower)
-                    merged.append(term)
-
+            # Use LLM terms only — MetaMap adds noise when LLM succeeds
             return ExpandedQuery(
                 original_query=query,
-                mesh_terms=merged,
+                mesh_terms=valid_terms,
                 expansion_method="llm",
                 low_confidence=False,
                 raw_llm_terms=llm_terms,

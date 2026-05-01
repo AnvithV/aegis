@@ -1,0 +1,95 @@
+---
+title: API Overview
+sidebar_label: Overview
+---
+
+# Aegis API Reference
+
+The Aegis API is a JSON REST API served at:
+
+```
+https://aegis-backend.fly.dev
+```
+
+All endpoints are versioned under `/v1/`. The API is stateless — every request must carry a valid JWT in the `Authorization` header.
+
+---
+
+## Authentication
+
+Every endpoint except `GET /v1/health` requires a Bearer token.
+
+```http
+Authorization: Bearer <token>
+```
+
+Tokens are signed HS256 JWTs containing the following claims:
+
+| Claim | Type | Description |
+|-------|------|-------------|
+| `sub` | `string` | Customer identifier (used for scoping results) |
+| `customer_name` | `string` | Display name |
+| `allowed_cohorts` | `string[] \| null` | Restricts which candidate cohorts are visible; `null` means no restriction |
+| `rate_limit_qps` | `integer` | Requests per second ceiling |
+| `llm_budget_cents` | `integer` | Maximum LLM spend in fractional USD cents per token cycle |
+| `exp` | `timestamp` | Expiry time |
+| `iat` | `timestamp` | Issued-at time |
+
+Tokens are generated server-side with `create_token(CustomerClaims(...))`. See [`docs/deploy.md`](https://github.com/AnvithV/aegis/blob/main/docs/deploy.md) for the generation command.
+
+A **401** is returned if the token is missing, malformed, or expired. A **403** is returned if the token's `allowed_cohorts` does not include the requested cohort.
+
+---
+
+## Base URL
+
+| Environment | Base URL |
+|-------------|----------|
+| Production | `https://aegis-backend.fly.dev` |
+| Local dev | `http://localhost:8000` |
+
+---
+
+## Common Response Shapes
+
+### Error
+
+All errors return a JSON body:
+
+```json
+{
+  "error": "Short error code",
+  "detail": "Human-readable explanation",
+  "retry_after": null
+}
+```
+
+`retry_after` is an integer (seconds) only on `429 Too Many Requests`.
+
+### HTTP Status Codes
+
+| Code | Meaning |
+|------|---------|
+| `200` | Success |
+| `202` | Accepted — background job created |
+| `400` | Bad request (validation failure) |
+| `401` | Missing or invalid token |
+| `403` | Token valid but insufficient scope |
+| `404` | Resource not found |
+| `409` | Conflict (e.g. cancelling an already-complete job) |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
+
+---
+
+## Endpoint Groups
+
+| Group | Prefix | What it does |
+|-------|--------|--------------|
+| [Queries](./queries) | `/v1/queries` | Submit searches, classify queries, retrieve results |
+| [Jobs](./jobs) | `/v1/jobs` | Monitor and cancel async pipeline jobs |
+| [Candidates](./candidates) | `/v1/candidates` | Fetch evidence trails and manage analyst notes |
+| [Shortlists](./shortlists) | `/v1/shortlists` | Create and manage curated candidate lists |
+| [HITL](./hitl) | `/v1/hitl` | Human-in-the-loop identity review queue |
+| [Refit](./refit) | `/v1/refit` | Trigger and inspect weight vector refit cycles |
+| [System](./system) | `/v1/health` | Health check |

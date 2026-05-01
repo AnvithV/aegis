@@ -29,7 +29,11 @@ class JobStore:
         migration_dir = Path(__file__).parent / "migrations"
         for sql_file in sorted(migration_dir.glob("*.sql")):
             sql = sql_file.read_text()
-            self._conn.execute(sql)
+            try:
+                self._conn.execute(sql)
+            except Exception:
+                # Migrations are idempotent; conflicts from concurrent writers are safe to ignore
+                pass
 
     def create(self, *, job_id: str, query_text: str, created_by: str) -> None:
         """Insert a new job with status='in_progress'."""

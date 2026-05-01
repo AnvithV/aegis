@@ -8,7 +8,6 @@ import httpx
 import pytest
 import respx
 
-from aegis.sources.non_us_grants import NonUsGrantRecord
 from aegis.sources.openalex import (
     OpenAlexAuthor,
     OpenAlexClient,
@@ -178,36 +177,6 @@ async def test_search_authors_returns_parsed_objects(client: OpenAlexClient) -> 
     assert len(a.affiliations) == 1
     assert a.affiliations[0]["institution_name"] == "Harvard University"
     assert a.affiliations[0]["country"] == "US"
-
-
-@respx.mock
-@pytest.mark.anyio
-async def test_get_grants_by_funder_returns_non_us_grant_records(
-    client: OpenAlexClient,
-) -> None:
-    """get_grants_by_funder returns NonUsGrantRecord objects."""
-    respx.get("https://api.openalex.org/works").mock(
-        return_value=httpx.Response(
-            200, json=_works_response([_WORK_ITEM])
-        )
-    )
-
-    grants: list[NonUsGrantRecord] = []
-    async for g in client.get_grants_by_funder("ERC"):
-        grants.append(g)
-
-    assert len(grants) == 1
-    g = grants[0]
-    assert isinstance(g, NonUsGrantRecord)
-    assert g.funder == "ERC"
-    assert g.funder_country == "EU"
-    assert g.source == "openalex"
-    assert g.grant_reference == "ERC-ERC-2023-STG-101"
-    assert "Jane Smith" in g.pi_names
-    assert g.start_date is not None
-    assert g.start_date.year == 2024
-    assert len(g.subject_areas) == 2
-    assert g.currency == "EUR"
 
 
 @respx.mock

@@ -95,6 +95,7 @@ class RecordIngester:
         self.merged_count = 0
         self.error_count = 0
         self.linked_count = 0
+        self.ingested_uuids: set[str] = set()
 
         # Load existing candidates once for probabilistic linking.
         self._snapshot: list[Candidate] = self._store.list_by_cohort(None)
@@ -124,6 +125,7 @@ class RecordIngester:
                     merged if c.uuid == merged.uuid else c
                     for c in self._snapshot
                 ]
+                self.ingested_uuids.add(merged.uuid)
                 self.merged_count += 1
                 return False
 
@@ -131,6 +133,7 @@ class RecordIngester:
         self._upsert_with_retry(candidate)
         self._update_cache(candidate)
         self._snapshot.append(candidate)
+        self.ingested_uuids.add(candidate.uuid)
         self.new_count += 1
         return True
 

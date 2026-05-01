@@ -1,0 +1,138 @@
+---
+title: Jobs
+sidebar_label: Jobs
+---
+
+# Jobs
+
+When a query is submitted via `POST /v1/queries`, the pipeline runs as a background async task and a **Job** record is created immediately. Jobs track status, duration, and candidate count.
+
+A job and its corresponding query share the same ID (`job_id` === `query_id`).
+
+---
+
+## GET /v1/jobs
+
+List all jobs created by the authenticated customer, newest first.
+
+**Auth required:** Yes
+
+### Query Parameters
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | `integer` | `1` | Page number (1-indexed) |
+| `per_page` | `integer` | `20` | Results per page |
+
+### Response — 200 OK
+
+```json
+{
+  "jobs": [
+    {
+      "id": "a3f2c1d0e8b947f6a2c3d4e5f6a7b8c9",
+      "query_text": "KRAS G12C inhibitor drug discovery",
+      "status": "complete",
+      "created_at": "2026-04-29T14:32:00Z",
+      "completed_at": "2026-04-29T14:33:48Z",
+      "duration_ms": 108200,
+      "source_count": 4,
+      "candidate_count": 20,
+      "created_by": "frontend"
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+### Job Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | UUID; same as `query_id` |
+| `query_text` | `string` | The `task_description` submitted |
+| `status` | `string` | `in_progress`, `complete`, `failed`, or `cancelled` |
+| `created_at` | `ISO 8601` | When the job was created |
+| `completed_at` | `ISO 8601 \| null` | When the job finished (all statuses) |
+| `duration_ms` | `integer \| null` | Total pipeline wall-clock time in milliseconds |
+| `source_count` | `integer \| null` | Number of sources that completed (max 4) |
+| `candidate_count` | `integer \| null` | Number of candidates returned in the ranked list |
+| `created_by` | `string` | The `sub` claim from the token that submitted this job |
+
+### Job Statuses
+
+| Status | Meaning |
+|--------|---------|
+| `in_progress` | Pipeline is running. Subscribe to `GET /v1/queries/{id}/stream` for live progress. |
+| `complete` | Pipeline finished. Results available at `GET /v1/queries/{id}`. |
+| `failed` | An unhandled exception terminated the pipeline. No results are available. |
+| `cancelled` | The job was cancelled by `POST /v1/jobs/{id}/cancel` before it finished. |
+
+---
+
+## GET /v1/jobs/\{job_id\}
+
+Get the current status and metadata for a single job.
+
+**Auth required:** Yes
+
+### Path Parameters
+
+| Param | Description |
+|-------|-------------|
+| `job_id` | The ID returned by `POST /v1/queries` |
+
+### Response — 200 OK
+
+Same shape as a single element from `GET /v1/jobs`.
+
+```json
+{
+  "id": "a3f2c1d0e8b947f6a2c3d4e5f6a7b8c9",
+  "query_text": "KRAS G12C inhibitor drug discovery",
+  "status": "complete",
+  "created_at": "2026-04-29T14:32:00Z",
+  "completed_at": "2026-04-29T14:33:48Z",
+  "duration_ms": 108200,
+  "source_count": 4,
+  "candidate_count": 20,
+  "created_by": "frontend"
+}
+```
+
+### Errors
+
+| Status | Condition |
+|--------|-----------|
+| `404` | No job with that ID, or it belongs to a different customer |
+
+---
+
+## POST /v1/jobs/\{job_id\}/cancel
+
+Cancel a job that is currently `in_progress`. This cancels the underlying asyncio task and marks the job as `cancelled`. Already-ingested candidates are not rolled back — the partial pipeline state is preserved in the database.
+
+**Auth required:** Yes
+
+### Path Parameters
+
+| Param | Description |
+|-------|-------------|
+| `job_id` | The ID of the in-progress job to cancel |
+
+### Response — 200 OK
+
+```json
+{
+  "status": "cancelled"
+}
+```
+
+### Errors
+
+| Status | Condition |
+|--------|-----------|
+| `404` | Job not found or belongs to a different customer |
+| `409` | Job is already `complete`, `failed`, or `cancelled` — cannot cancel |
