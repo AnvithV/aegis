@@ -1,0 +1,130 @@
+---
+title: Weight Refit
+sidebar_label: Refit
+---
+
+# Refit — Weight Vector Relearning
+
+The refit system updates the scoring weight vectors (F1–F7 family weights and α/β/γ exponents) based on accumulated analyst feedback and downstream quality signals. Refits run per specialty and produce a new versioned YAML weight file if the update passes statistical guard checks.
+
+---
+
+## POST /v1/refit/trigger
+
+Trigger a full weight refit cycle for the given specialty. This is a **synchronous** operation — the response is returned once the refit completes (or fails). Expect latency of 1–10 seconds depending on how much feedback has accumulated.
+
+**Auth required:** Yes
+
+### Query Parameters
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `specialty` | `string` | `"basic_research"` | The specialty to refit. One of: `basic_research`, `drug_discovery`, `clinician`, `policy_epi` |
+
+### Response — 200 OK
+
+```json
+{
+  "status": "completed",
+  "specialty": "basic_research",
+  "deployment_decision": "auto_deploy",
+  "new_version": 2,
+  "prior_exponents": {
+    "alpha": 0.80,
+    "beta": 1.00,
+    "gamma": 0.30
+  },
+  "new_exponents": {
+    "alpha": 0.82,
+    "beta": 1.03,
+    "gamma": 0.28
+  },
+  "delta": {
+    "alpha": 0.02,
+    "beta": 0.03,
+    "gamma": -0.02
+  },
+  "guard_verdict": "CI within bounds; delta below rollback threshold",
+  "message": "Auto-deployed: all guard checks passed"
+}
+```
+
+### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `status` | `"completed"` — refit ran; `"blocked"` — guard check failed and weights were not updated; `"error"` — unexpected failure |
+| `deployment_decision` | `"auto_deploy"` — new weights written to disk; `"manual_gate"` — refit ran but requires human approval before deployment; `"blocked"` — guard check prevented update |
+| `new_version` | The version number of the newly written weight file. `null` if nothing was deployed. |
+| `prior_exponents` | The α/β/γ values before the refit |
+| `new_exponents` | The α/β/γ values after the refit |
+| `delta` | Signed difference (new − prior) for each exponent |
+| `guard_verdict` | Human-readable explanation of why the guard passed or failed |
+| `message` | Deployment decision explanation |
+
+### Status Values
+
+| Status | When it occurs |
+|--------|---------------|
+| `completed` | Refit ran successfully. Check `deployment_decision` to see if weights were actually updated. |
+| `blocked` | Guard check rejected the new weights (e.g., delta too large, CI too wide, insufficient data). Prior weights remain active. |
+| `error` | An unexpected exception occurred. Prior weights remain active. The `message` field contains the error string. |
+
+### Data Sources
+
+The refitter reads two files:
+
+| File | Purpose |
+|------|---------|
+| `data/aegis/audit_judgments.jsonl` | Analyst accept/reject labels on ranked candidates |
+| `data/aegis/downstream_quality.jsonl` | Downstream quality outcomes (e.g., whether shortlisted candidates were contacted) |
+
+If either file is empty, the refit runs but typically returns `blocked` (insufficient data).
+
+---
+
+## GET /v1/refit/status
+
+Return the current state of the weight vector for a given specialty — version, exponents, and how many feedback items are pending ingestion into the next refit.
+
+**Auth required:** Yes
+
+### Query Parameters
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `specialty` | `string` | `"basic_research"` | The specialty to inspect |
+
+### Response — 200 OK
+
+```json
+{
+  "last_refit_at": "2026-04-26",
+  "current_version": 1,
+  "specialty": "basic_research",
+  "exponents": {
+    "alpha": 0.80,
+    "beta": 1.00,
+    "gamma": 0.30
+  },
+  "ci_half_widths": {},
+  "pending_downstream_outcomes": 42
+}
+```
+
+### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `last_refit_at` | ISO date (or datetime) of the last successful refit. `null` if the weight file has no timestamp. |
+| `current_version` | Integer version number of the current active weight file |
+| `specialty` | The specialty name from the weight YAML |
+| `exponents` | Current α/β/γ values |
+| `ci_half_widths` | Bootstrap confidence interval half-widths for each exponent. Currently returned as `{}` (not yet computed in v1). |
+| `pending_downstream_outcomes` | Number of lines in `downstream_quality.jsonl` waiting to be used in the next refit |
+
+### Errors
+
+| Status | Condition |
+|--------|-----------|
+| `404` | No weight file found for the given specialty |

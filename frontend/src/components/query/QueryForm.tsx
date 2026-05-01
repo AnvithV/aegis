@@ -96,6 +96,10 @@ export default function QueryForm() {
         body.cutoff_strategy = cutoffStrategy.trim();
       }
 
+      if (classification?.query_type) {
+        body.query_type_override = classification.query_type;
+      }
+
       const response = await fetch("/api/queries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

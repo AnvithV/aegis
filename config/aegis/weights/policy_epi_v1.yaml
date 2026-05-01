@@ -2,10 +2,10 @@ version: 1
 specialty: policy_epi
 created: "2026-04-27"
 weights:
-  f1_rcr: 0.25
-  f2_funding: 0.20
+  f1_rcr: 0.30
+  f2_funding: 0.25
   f3_leadership: 0.25
-  f4_apex: 0.10
+  f4_apex: 0.00
   f5_translational: 0.15
   f6_lineage: 0.05
 exponents:

@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+export const maxDuration = 300; // 5 minutes — pipeline can take 60-120s
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -37,6 +37,8 @@ class GrantRecord(BaseModel):
 
     project_number: str
     activity_code: str
+    project_title: str | None = None
+    abstract_text: str | None = None
     pis: list[GrantPI]
     total_cost: int | None = None
     fiscal_year: int
@@ -106,9 +108,17 @@ def _parse_grant(data: dict[str, Any]) -> GrantRecord:
             if len(code_part) >= 3:
                 activity = code_part[:3]
 
+    project_title = data.get("project_title") or data.get("project_title_text") or None
+
+    # Extract abstract for topical_fit matching
+    abstract_raw = data.get("abstract_text") or data.get("phr_text") or ""
+    abstract_text: str | None = abstract_raw.strip()[:500] if abstract_raw else None
+
     return GrantRecord(
         project_number=project_num,
         activity_code=activity,
+        project_title=project_title,
+        abstract_text=abstract_text,
         pis=pis,
         total_cost=data.get("award_amount"),
         fiscal_year=data.get("fiscal_year") or 0,
@@ -133,10 +143,21 @@ class ReporterClient:
         rcdc_terms: list[str],
         since_fy: int | None = None,
         page_size: int = 500,
+        query_text: str | None = None,
     ) -> AsyncIterator[GrantRecord]:
-        """Fetch grants matching RCDC terms, paginated."""
+        """Fetch grants matching the query text or RCDC terms, paginated.
+
+        Uses advanced_text_search on the ``terms`` field, which searches
+        project abstracts and titles.  Passing ``query_text`` directly
+        produces far more relevant results than relying on RCDC categories.
+        """
+        search_text = query_text or " ".join(rcdc_terms[:5])
         criteria: dict[str, Any] = {
-            "spending_categories_desc": rcdc_terms,
+            "advanced_text_search": {
+                "operator": "and",
+                "search_field": "terms",
+                "search_text": search_text,
+            }
         }
         if since_fy is not None:
             criteria["fiscal_years"] = list(range(since_fy, since_fy + 20))

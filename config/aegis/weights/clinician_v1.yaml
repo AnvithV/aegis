@@ -7,11 +7,11 @@ created: "2026-04-26"
 weights:
   f1_rcr: 0.15
   f2_funding: 0.10
-  f3_leadership: 0.25
-  f4_apex: 0.05
-  f5_translational: 0.15
+  f3_leadership: 0.30
+  f4_apex: 0.00
+  f5_translational: 0.20
   f6_lineage: 0.05
-  f7_clinician: 0.25
+  f7_clinician: 0.20
 exponents:
   alpha: 0.7
   beta: 1.0

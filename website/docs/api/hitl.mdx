@@ -1,0 +1,141 @@
+---
+title: HITL Review Queue
+sidebar_label: HITL
+---
+
+# HITL — Human-in-the-Loop Review Queue
+
+When the probabilistic record linker scores a candidate pair between **0.50 and 0.95** confidence (below the auto-link threshold but above the reject threshold), that pair is queued for human review. These endpoints expose the review queue so analysts can confirm, reject, or split ambiguous identity matches.
+
+---
+
+## GET /v1/hitl/next
+
+Return the next pending review item from the queue (FIFO order).
+
+**Auth required:** Yes (no customer scoping — all reviewers share the same queue)
+
+### Response — 200 OK
+
+When an item is pending:
+
+```json
+{
+  "item": {
+    "id": "review_1a2b3c4d5e6f",
+    "candidate_a_uuid": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+    "candidate_b_uuid": "c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7",
+    "candidate_a_name": "Jane Smith",
+    "candidate_b_name": "J. Smith",
+    "confidence": 0.72,
+    "feature_scores": {
+      "name_similarity": 0.85,
+      "affiliation_similarity": 0.60,
+      "coauthor_overlap": 0.40,
+      "mesh_overlap": 0.90,
+      "time_continuity": 0.80
+    },
+    "created_at": "2026-04-29T14:35:00Z",
+    "status": "pending"
+  }
+}
+```
+
+When the queue is empty:
+
+```json
+{
+  "item": null
+}
+```
+
+### Review Item Fields
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique review item ID |
+| `candidate_a_uuid` | UUID of the first candidate (the existing record in the DB) |
+| `candidate_b_uuid` | UUID of the incoming candidate that triggered the ambiguous match |
+| `candidate_a_name` | Display name of candidate A |
+| `candidate_b_name` | Display name of candidate B |
+| `confidence` | Weighted composite score from the Fellegi-Sunter linker (0.50–0.95) |
+| `feature_scores` | Per-feature breakdown used to compute the composite score |
+| `status` | Always `"pending"` from this endpoint |
+
+### Feature Score Definitions
+
+| Feature | Weight | How computed |
+|---------|--------|--------------|
+| `name_similarity` | 35% | Fuzzy token-set ratio across all name variants |
+| `affiliation_similarity` | 25% | Fuzzy string ratio on institution name, ROR-normalised where possible |
+| `coauthor_overlap` | 15% | Fraction of shared co-author names |
+| `mesh_overlap` | 15% | Jaccard similarity of MeSH descriptor sets |
+| `time_continuity` | 10% | Recency gap between last known activities |
+
+---
+
+## POST /v1/hitl/\{item_id\}/decide
+
+Record a reviewer decision for a pending item.
+
+**Auth required:** Yes
+
+### Path Parameters
+
+| Param | Description |
+|-------|-------------|
+| `item_id` | The review item ID from `GET /v1/hitl/next` |
+
+### Request Body
+
+```json
+{
+  "decision": "confirm",
+  "reviewer": "anvith"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `decision` | `"confirm" \| "reject" \| "split"` | ✅ | The reviewer's verdict |
+| `reviewer` | `string` | ❌ | Reviewer identifier for audit trail. Defaults to `"system"`. |
+
+### Decision Values
+
+| Value | Outcome |
+|-------|---------|
+| `"confirm"` | The two candidates are the same person. Candidate B is merged into Candidate A; Candidate B's UUID is retired. |
+| `"reject"` | The two candidates are different people. Both records are kept as separate candidates. |
+| `"split"` | The existing Candidate A record should be split — it already conflates two people. Creates a new demerge task. |
+
+### Response — 200 OK
+
+```json
+{
+  "status": "ok",
+  "item_id": "review_1a2b3c4d5e6f",
+  "decision": "confirm"
+}
+```
+
+---
+
+## GET /v1/hitl/stats
+
+Return summary statistics for the review queue.
+
+**Auth required:** Yes
+
+### Response — 200 OK
+
+```json
+{
+  "pending": 14,
+  "reviewed": 83
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `pending` | Number of items in the queue not yet reviewed |
+| `reviewed` | Total number of decisions recorded (confirm + reject + split) |

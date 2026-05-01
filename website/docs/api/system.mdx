@@ -1,0 +1,45 @@
+---
+title: System
+sidebar_label: System
+---
+
+# System
+
+---
+
+## GET /v1/health
+
+Returns the health status of the API and its key dependencies. This endpoint does **not** require authentication and is used by the Fly.io health check (checked every 30 seconds).
+
+### Response — 200 OK (healthy)
+
+```json
+{
+  "status": "healthy",
+  "version": "5.0.0",
+  "database": "healthy",
+  "candidate_count": 1247
+}
+```
+
+### Response — 200 OK (degraded)
+
+```json
+{
+  "status": "degraded",
+  "version": "5.0.0",
+  "database": "unhealthy",
+  "candidate_count": 0
+}
+```
+
+The HTTP status code is always `200` — Fly.io monitors the `status` field value rather than HTTP code. A `degraded` response means the API is running but DuckDB is unreachable (e.g., the `/data` volume is not mounted).
+
+### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `status` | `"healthy"` if all checks pass; `"degraded"` if DuckDB is unreachable |
+| `version` | API version string |
+| `database` | `"healthy"` or `"unhealthy"` |
+| `candidate_count` | Total number of candidate records currently in the database. Useful for confirming that seed data is loaded. |

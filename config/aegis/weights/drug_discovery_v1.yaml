@@ -5,12 +5,12 @@ version: 1
 specialty: drug_discovery
 created: "2026-04-26"
 weights:
-  f1_rcr: 0.15
-  f2_funding: 0.05
-  f3_leadership: 0.15
+  f1_rcr: 0.30
+  f2_funding: 0.20
+  f3_leadership: 0.20
   f4_apex: 0.05
-  f5_translational: 0.50
-  f6_lineage: 0.10
+  f5_translational: 0.20
+  f6_lineage: 0.05
 exponents:
   alpha: 0.7
   beta: 1.0

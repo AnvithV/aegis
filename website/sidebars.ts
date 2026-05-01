@@ -32,6 +32,21 @@ const sidebars: SidebarsConfig = {
       ],
     },
     'data-sources',
+    {
+      type: 'category',
+      label: 'API Reference',
+      collapsed: false,
+      items: [
+        'api/index',
+        'api/queries',
+        'api/jobs',
+        'api/candidates',
+        'api/shortlists',
+        'api/hitl',
+        'api/refit',
+        'api/system',
+      ],
+    },
     'roadmap',
   ],
 };
