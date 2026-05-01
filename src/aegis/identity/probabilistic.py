@@ -23,7 +23,7 @@ _WEIGHT_TIME = 0.10
 
 # Default thresholds.
 _DEFAULT_THRESHOLDS: dict[str, float] = {
-    "auto_link": 0.95,
+    "auto_link": 0.75,
     "review": 0.5,
 }
 
@@ -233,11 +233,19 @@ class ProbabilisticLinker:
                 if aff.ror_id == artifact_ror_parent:
                     return 0.5
 
-        # Check if any candidate affiliation has a parent matching artifact
+        # Dynamically resolve candidate affiliation strings and compare ROR IDs.
+        # Handles the common case where aff.ror_id was not set at ingest time
+        # (e.g. PubMed candidates whose affiliations weren't ROR-resolved).
         for aff in candidate.affiliations:
             resolved = self._ror_resolver.resolve(aff.canonical_name)
-            if resolved and resolved.parent_ror_id == artifact_ror_id:
-                return 0.5
+            if resolved:
+                if resolved.ror_id == artifact_ror_id:
+                    return 1.0
+                if (
+                    resolved.parent_ror_id == artifact_ror_id
+                    or resolved.ror_id == artifact_ror_parent
+                ):
+                    return 0.5
 
         return 0.0
 

@@ -26,13 +26,16 @@ def get_or_create_queue(query_id: str) -> asyncio.Queue[dict | None]:
 
 
 def push_event(query_id: str, event_type: str, data: dict) -> None:
-    """Push an SSE event to a query's stream (non-blocking)."""
-    queue = _active_streams.get(query_id)
-    if queue is not None:
-        try:
-            queue.put_nowait({"type": event_type, "data": data})
-        except asyncio.QueueFull:
-            logger.warning("SSE queue full for query %s, dropping event", query_id)
+    """Push an SSE event to a query's stream (non-blocking).
+
+    Pre-creates the queue if it doesn't exist so events emitted before
+    the client opens the SSE connection are buffered, not dropped.
+    """
+    queue = get_or_create_queue(query_id)
+    try:
+        queue.put_nowait({"type": event_type, "data": data})
+    except asyncio.QueueFull:
+        logger.warning("SSE queue full for query %s, dropping event", query_id)
 
 
 def close_stream(query_id: str) -> None:

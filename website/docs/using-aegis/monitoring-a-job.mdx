@@ -1,0 +1,65 @@
+---
+sidebar_position: 2
+title: Monitoring a Job
+---
+
+# Monitoring a Job
+
+After submitting a query, the pipeline runs in the background. The Jobs pages let you track progress in real time.
+
+## Jobs List
+
+Navigate to **/jobs** to see all submitted queries. The table displays:
+
+| Column | Description |
+|---|---|
+| Query | The task description text |
+| Status | Badge showing **Running**, **Complete**, **Failed**, or **Cancelled** |
+| Started | Timestamp when the job was created |
+| Duration | Elapsed time (updates live for running jobs) |
+| Candidates | Number of candidates found so far |
+| Actions | View details or results |
+
+The page **auto-refreshes every 3 seconds** while any job has an `in_progress` status. Running jobs display a mini animated progress bar. Completed jobs link directly to their results page.
+
+## Job Detail
+
+Click a job row to open **`/jobs/{id}`**, which shows:
+
+- **Header** -- Back link, Cancel button (for running jobs), and "View Results" button (for completed jobs).
+- **Query Info** -- Task description, current status, and timing information.
+
+### Source Progress Grid
+
+The detail page displays a grid of five source cards, each tracking its fetch status independently:
+
+| Source | What It Fetches |
+|---|---|
+| PubMed | Biomedical publications matching the query MeSH terms |
+| NIH Reporter | Active and historical NIH-funded grants |
+| CT.gov | Clinical trials by condition and intervention |
+| OpenAlex Works | Global scholarly publications and citation data |
+| OpenAlex Grants | International grant funding records |
+
+Each card transitions through states: **Pending** (waiting to start), **Fetching** (actively retrieving records), **Complete** (finished with record count), or **Failed** (error encountered). Progress updates arrive via Server-Sent Events (SSE) from the `/api/queries/{id}/stream` endpoint.
+
+## Cancelling a Job
+
+To cancel a running job, click the **Cancel** button on the job detail page. This sends a cancellation request that terminates the asyncio pipeline task on the backend. The job status updates to **Cancelled** and no further source fetches are attempted.
+
+Cancellation is useful when you realize a query was mis-specified or when you want to free up resources for a different query.
+
+## Job Lifecycle
+
+Every job follows this lifecycle:
+
+```
+in_progress  -->  complete
+             -->  failed
+             -->  cancelled
+```
+
+- **in_progress** -- Pipeline is fetching sources and scoring candidates.
+- **complete** -- All sources finished. Results available at `/results/{id}`.
+- **failed** -- An unrecoverable error occurred during pipeline execution.
+- **cancelled** -- Manually cancelled by the user before completion.

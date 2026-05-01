@@ -30,6 +30,7 @@ class QueryRequest(BaseModel):
     cutoff_strategy: CutoffStrategy = CutoffStrategy.top_k
     score_threshold: float | None = None
     include_variance_bands: bool = True
+    query_type_override: str | None = None
 
     @field_validator("task_description")
     @classmethod

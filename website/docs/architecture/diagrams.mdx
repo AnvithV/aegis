@@ -5,26 +5,22 @@ title: Architecture Diagrams
 
 # Architecture Diagrams
 
-Aegis is organized into five layers that data flows through sequentially:
+These diagrams reflect the deployed Aegis architecture across all eight phases. Aegis is organized into five layers that data flows through sequentially:
 
-1. **Ingestion:** Source clients pull data from approximately 25 external APIs and databases, producing typed records that land in the DuckDB analytical store. Sources span publications, grants, patents, clinical trials, clinician credentials, integrity databases, and taxonomy crosswalks.
+1. **Ingestion:** Source clients pull data from approximately 20 external APIs and databases, producing typed records that land in the DuckDB analytical store. Sources span publications, grants, patents, clinical trials, clinician credentials, integrity databases, and taxonomy crosswalks.
 
 2. **Identity Resolution:** Raw records are deduplicated and unified into candidate profiles through deterministic matching (ORCID, NPI, ROR) and probabilistic Fellegi-Sunter linkage. Borderline matches are routed to human review. Cross-population merging handles researchers who appear in multiple populations.
 
 3. **Scoring and Ranking:** Each candidate receives a composite score built from the quality prior (F1-F7 sub-scores composed via geometric mean), topical fit (MeSH vector cosine similarity), recency (exponential decay), and the integrity gate (hard exclusions and soft discounts). Per-population weight vectors control the relative importance of each component.
 
-4. **API:** A FastAPI service exposes ranked results to consumers with JWT authentication, rate limiting, audit logging, and evidence-trail responses. The feedback endpoint ingests downstream task quality signals for weight relearning.
+4. **API:** A FastAPI service exposes ranked results to consumers with JWT authentication, rate limiting, audit logging, and evidence-trail responses. The feedback endpoint ingests downstream task quality signals for weight relearning. Queries run asynchronously — POST /v1/queries returns HTTP 202 immediately and streams progress via SSE.
 
-5. **Frontend:** A Next.js application provides task managers with screens for submitting queries, viewing ranked results with score breakdowns, and reviewing query history.
+5. **Frontend:** A Next.js application provides task managers with screens for submitting queries, viewing ranked results with score breakdowns, reviewing query history, monitoring job progress, managing shortlists, and annotating candidates.
 
 ## High-Level Architecture
 
 ![High-level architecture diagram](/images/architecture.svg)
 
-*This diagram is a placeholder. The final version will be created in Excalidraw or Figma.*
-
 ## Data Flow
 
 ![Data flow diagram](/images/data-flow.svg)
-
-*This diagram is a placeholder. The final version will be created in Excalidraw or Figma.*

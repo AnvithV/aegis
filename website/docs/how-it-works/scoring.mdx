@@ -12,7 +12,7 @@ Aegis produces a composite ranking score for each candidate by combining four co
 The quality prior measures the overall strength of a researcher's profile, independent of any specific query. It answers the question: "How strong is this researcher in general?" The prior is built from six sub-scores (seven for clinicians):
 
 - **F1 — Citation Impact:** Based on the Relative Citation Ratio from iCite, which normalizes citation counts by field and publication year. A highly cited paper in a small field is valued appropriately rather than being overshadowed by papers in high-volume fields.
-- **F2 — Funding Trajectory:** Tracks NIH and international grant activity, considering total funding, number of active grants, and the progression from early-career to established investigator awards.
+- **F2 — Funding Trajectory:** Tracks grant activity from NIH RePORTER and OpenAlex Grants (which covers major international funders including ERC, Wellcome Trust, DFG, and others), considering total funding, number of active grants, and the progression from early-career to established investigator awards.
 - **F3 — Leadership Positions:** Captures editorial board memberships, society leadership roles, and other markers of professional standing in the field.
 - **F4 — Apex-List Membership:** Whether the researcher appears on curated apex rosters — recognized lists of top experts in specific fields, such as FDA advisory committee members or NCCN panel members.
 - **F5 — Translational Output:** Measures the ability to move findings from bench to bedside, incorporating clinical trial involvement, FDA drug approvals, and for drug-discovery researchers, patent filings and chemical biology contributions via ChEMBL.
@@ -47,7 +47,18 @@ The four components combine into the final ranking score:
 
 The exponents — alpha, beta, and gamma — control how much weight each component receives in the final ranking. These exponents are not set by hand. They are learned from data through a Plackett-Luce statistical model that fits the exponents to match expert pairwise judgments: domain experts compare pairs of candidates and indicate which should rank higher, and the model finds the exponent values that best reproduce those preferences.
 
-## Per-Population Weights
+## Query Type Classifier
+
+Before scoring, Aegis classifies each incoming query into one of four query types, each mapped to a specific weight vector:
+
+- **basic_research** (default) — fundamental science queries; uses the translational weight vector
+- **drug_discovery** — queries mentioning drug targets, compounds, or therapeutic development; uses the drug-discovery weight vector
+- **clinical_trial_pi** — queries seeking clinical investigators or trial leaders; uses a clinician-weighted vector emphasizing F7 and trial PI roles
+- **policy_epi** — epidemiology and health policy queries; uses a vector emphasizing publication breadth and funding
+
+The classifier uses keyword matching with confidence levels. When confidence is low, it falls back to the default basic_research type. Weight vector files are stored at `config/aegis/weights/*.yaml` and can be customized per deployment.
+
+## Per-Population and Per-Query-Type Weights
 
 Each of the three researcher populations — Translational, Drug Discovery, and Clinician — has its own weight vector. The exponents are learned independently for each population because the relative importance of scoring components differs:
 

@@ -201,22 +201,18 @@ class CtgovClient:
     def __init__(self, retry_policy: RetryPolicy | None = None) -> None:
         self._retry = retry_policy or RetryPolicy()
 
-    async def fetch_studies_by_condition(
+    async def _paginate(
         self,
-        mesh_terms: list[str],
+        params: dict[str, str | int],
         page_size: int = 100,
     ) -> AsyncIterator[StudyRecord]:
-        """Fetch studies matching MeSH condition terms, paginated."""
-        query = " OR ".join(mesh_terms)
+        """Shared pagination loop for CT.gov API calls."""
+        params = {**params, "pageSize": page_size, "format": "json"}
         page_token: str | None = None
+        seen: set[str] = set()
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             while True:
-                params: dict[str, str | int] = {
-                    "query.cond": query,
-                    "pageSize": page_size,
-                    "format": "json",
-                }
                 if page_token:
                     params["pageToken"] = page_token
 
@@ -235,8 +231,38 @@ class CtgovClient:
                     break
 
                 for study_data in studies:
-                    yield _parse_study(study_data)
+                    record = _parse_study(study_data)
+                    if record.nct_id not in seen:
+                        seen.add(record.nct_id)
+                        yield record
 
                 page_token = body.get("nextPageToken")
                 if not page_token:
                     break
+
+    async def fetch_studies_by_text(
+        self,
+        query_text: str,
+        page_size: int = 100,
+    ) -> AsyncIterator[StudyRecord]:
+        """Full-text search across all CT.gov fields (title, conditions,
+        interventions, description).  Use this for free-form queries such as
+        'KRAS inhibitor lung cancer' — it finds trials that mention the topic
+        in *any* field, not just the condition name."""
+        async for record in self._paginate(
+            {"query.term": query_text}, page_size=page_size
+        ):
+            yield record
+
+    async def fetch_studies_by_condition(
+        self,
+        mesh_terms: list[str],
+        page_size: int = 100,
+    ) -> AsyncIterator[StudyRecord]:
+        """Fetch studies matching MeSH condition terms (query.cond field).
+        Kept for backwards compatibility; prefer fetch_studies_by_text for
+        free-form topic queries."""
+        async for record in self._paginate(
+            {"query.cond": " OR ".join(mesh_terms)}, page_size=page_size
+        ):
+            yield record

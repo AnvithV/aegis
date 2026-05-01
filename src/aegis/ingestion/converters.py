@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import json as json_mod
 import unicodedata
 from datetime import UTC, datetime
 
 from aegis.sources.ctgov import StudyRecord
+from aegis.sources.lens import LensPatentRecord
 from aegis.sources.openalex import OpenAlexWork
 from aegis.sources.pubmed import PubMedRecord
 from aegis.sources.reporter import GrantRecord
+from aegis.sources.uspto import PatentRecord
 from aegis.storage.schema import AffiliationSpan, ArtifactRefBundle, Candidate, MeshDescriptor
 
 
@@ -99,7 +102,7 @@ def pubmed_record_to_candidates(record: PubMedRecord) -> list[Candidate]:
                 ),
                 linkage_confidence=0.85 if strong_keys.get("orcid") else 0.70,
                 evidence_trail=[
-                    f"Published '{title_short}' (PMID:{record.pmid}, {date_str})"
+                    f"Principal Investigator: '{title_short}' (PMID:{record.pmid}, {date_str})"
                 ],
                 last_updated_per_source={"pubmed": datetime.now(UTC)},
                 mesh_descriptors=list(record.mesh_descriptors[:30]),
@@ -131,10 +134,17 @@ def grant_record_to_candidates(record: GrantRecord) -> list[Candidate]:
         uuid = _make_uuid(strong_keys, name, affiliation)
 
         cost_str = f"${record.total_cost:,}" if record.total_cost else "cost unknown"
+        title_part = f": '{record.project_title[:80]}'" if record.project_title else ""
         mesh = [
             MeshDescriptor(descriptor=cat, qualifier=None, major_topic=False)
             for cat in record.rcdc_categories[:10]
         ]
+
+        trail = [
+            f"Principal Investigator on NIH {record.project_number}{title_part} ({record.fiscal_year}, {cost_str})"
+        ]
+        if record.abstract_text:
+            trail.append(f"Grant scope: {record.abstract_text[:300]}")
 
         results.append(
             Candidate(
@@ -161,9 +171,7 @@ def grant_record_to_candidates(record: GrantRecord) -> list[Candidate]:
                     patent_ids=[],
                 ),
                 linkage_confidence=0.93 if strong_keys.get("era_commons") else 0.78,
-                evidence_trail=[
-                    f"NIH {record.project_number} ({record.fiscal_year}, {cost_str})"
-                ],
+                evidence_trail=trail,
                 last_updated_per_source={"reporter": datetime.now(UTC)},
                 mesh_descriptors=mesh,
             )
@@ -263,6 +271,19 @@ def openalex_work_to_candidates(record: OpenAlexWork) -> list[Candidate]:
             for t in record.mesh_terms[:10]
         ]
 
+        grant_ids: list[str] = []
+        try:
+            raw_data = json_mod.loads(record.raw_json)
+            for grant in raw_data.get("grants") or []:
+                award_id = grant.get("award_id")
+                funder_name = grant.get("funder_display_name", "")
+                if award_id:
+                    grant_ids.append(
+                        f"{funder_name}-{award_id}" if funder_name else award_id
+                    )
+        except (json_mod.JSONDecodeError, TypeError):
+            pass
+
         results.append(
             Candidate(
                 uuid=uuid,
@@ -272,7 +293,7 @@ def openalex_work_to_candidates(record: OpenAlexWork) -> list[Candidate]:
                 artifact_refs=ArtifactRefBundle(
                     pmids=[record.pmid] if record.pmid else [],
                     nct_ids=[],
-                    grant_ids=[],
+                    grant_ids=grant_ids,
                     patent_ids=[],
                 ),
                 linkage_confidence=0.85 if strong_keys.get("orcid") else 0.65,
@@ -281,6 +302,91 @@ def openalex_work_to_candidates(record: OpenAlexWork) -> list[Candidate]:
                 ],
                 last_updated_per_source={"openalex": datetime.now(UTC)},
                 mesh_descriptors=mesh,
+            )
+        )
+    return results
+
+
+# ---------------------------------------------------------------------------
+# USPTO Patents
+# ---------------------------------------------------------------------------
+
+
+def patent_record_to_candidates(record: PatentRecord) -> list[Candidate]:
+    """Extract lead inventors (or first inventor if none marked lead)."""
+    lead = [i for i in record.inventors if i.is_lead_inventor]
+    if not lead and record.inventors:
+        lead = [record.inventors[0]]
+
+    results: list[Candidate] = []
+    for inventor in lead:
+        name = inventor.full_name.strip()
+        if not name:
+            continue
+
+        uuid = _make_uuid({}, name)
+        title_short = record.title[:80] if record.title else record.patent_number
+
+        results.append(
+            Candidate(
+                uuid=uuid,
+                strong_keys={},
+                name_variants=[name],
+                affiliations=[],
+                artifact_refs=ArtifactRefBundle(
+                    pmids=[],
+                    nct_ids=[],
+                    grant_ids=[],
+                    patent_ids=[record.patent_number],
+                ),
+                linkage_confidence=0.60,
+                evidence_trail=[
+                    f"Lead inventor on US{record.patent_number}: '{title_short}' ({record.grant_date or 'date unknown'})"
+                ],
+                last_updated_per_source={"uspto": datetime.now(UTC)},
+                mesh_descriptors=[],
+            )
+        )
+    return results
+
+
+def lens_patent_to_candidates(record: LensPatentRecord) -> list[Candidate]:
+    """Extract lead inventors from a Lens.org patent record."""
+    results: list[Candidate] = []
+    inventors = record.inventors or []
+    if not inventors:
+        return results
+
+    # Use first inventor as lead (Lens doesn't flag sequence)
+    for inventor in inventors[:1]:
+        name = inventor.full_name if hasattr(inventor, "full_name") else inventor.name
+        name = name.strip()
+        if not name:
+            continue
+
+        patent_id = record.doc_number or record.lens_id
+        uuid = _make_uuid({}, name)
+        title_short = record.title[:80] if record.title else patent_id
+
+        results.append(
+            Candidate(
+                uuid=uuid,
+                strong_keys={},
+                name_variants=[name],
+                affiliations=[],
+                artifact_refs=ArtifactRefBundle(
+                    pmids=[],
+                    nct_ids=[],
+                    grant_ids=[],
+                    patent_ids=[patent_id],
+                ),
+                linkage_confidence=0.60,
+                evidence_trail=[
+                    f"Lead inventor on {patent_id}: '{title_short}'"
+                    + (f" ({record.date_published})" if record.date_published else "")
+                ],
+                last_updated_per_source={"lens": datetime.now(UTC)},
+                mesh_descriptors=[],
             )
         )
     return results

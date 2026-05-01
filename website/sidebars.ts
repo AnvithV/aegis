@@ -5,6 +5,15 @@ const sidebars: SidebarsConfig = {
     'what-is-aegis',
     {
       type: 'category',
+      label: 'Using Aegis',
+      items: [
+        'using-aegis/submitting-a-query',
+        'using-aegis/monitoring-a-job',
+        'using-aegis/reading-results',
+      ],
+    },
+    {
+      type: 'category',
       label: 'How It Works',
       items: [
         'how-it-works/data-pipeline',
@@ -23,6 +32,21 @@ const sidebars: SidebarsConfig = {
       ],
     },
     'data-sources',
+    {
+      type: 'category',
+      label: 'API Reference',
+      collapsed: false,
+      items: [
+        'api/index',
+        'api/queries',
+        'api/jobs',
+        'api/candidates',
+        'api/shortlists',
+        'api/hitl',
+        'api/refit',
+        'api/system',
+      ],
+    },
     'roadmap',
   ],
 };

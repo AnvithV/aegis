@@ -12,10 +12,7 @@ load_dotenv()
 import asyncio
 import hashlib
 import logging
-import os
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -45,44 +42,13 @@ from aegis.api.staleness import StalenessCircuitBreaker
 from aegis.api.streaming import close_stream, get_or_create_queue, push_event
 from aegis.api.streaming import router as streaming_router
 from aegis.api.jobs import router as jobs_router
+from aegis.ingestion.apex_loader import load_apex_rosters
+from aegis.integrity.data_loader import load_integrity_stores
 from aegis.storage.job_store import JobStore
 
 logger = logging.getLogger(__name__)
 
 _task_registry: dict[str, asyncio.Task[None]] = {}
-
-
-async def _background_refresh(interval_seconds: float) -> None:
-    """Run periodic source refresh in the background."""
-    from aegis.ingestion.orchestrator import RefreshOrchestrator
-
-    orchestrator = RefreshOrchestrator()
-    while True:
-        try:
-            summary = await orchestrator.run_full_refresh()
-            logger.info(
-                "Background refresh: %d/%d sources OK",
-                summary.completed,
-                summary.total_sources,
-            )
-        except Exception:
-            logger.exception("Background refresh failed")
-        await asyncio.sleep(interval_seconds)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: start background refresh on startup."""
-    refresh_interval = (
-        float(os.environ.get("AEGIS_REFRESH_INTERVAL_HOURS", "6")) * 3600
-    )
-    refresh_task = asyncio.create_task(_background_refresh(refresh_interval))
-    yield
-    refresh_task.cancel()
-    try:
-        await refresh_task
-    except asyncio.CancelledError:
-        pass
 
 
 def create_app(
@@ -97,7 +63,6 @@ def create_app(
         title="Aegis Expert Discovery API",
         version="1.0.0",
         description="Customer-facing query API for expert discovery and ranking",
-        lifespan=lifespan,
     )
 
     # Mount routers
@@ -117,6 +82,38 @@ def create_app(
     _circuit_breaker = circuit_breaker or StalenessCircuitBreaker()
     _formatter = formatter or ResultFormatter()
 
+    # Load apex rosters (fast — reads local YAML files only)
+    try:
+        _apex_store = load_apex_rosters()
+    except Exception:
+        logger.warning("Failed to load apex rosters at startup", exc_info=True)
+        from aegis.sources.apex_rosters import ApexRosterStore
+        _apex_store = ApexRosterStore()
+
+    # Integrity stores: start empty, download in background after startup
+    from aegis.sources.leie import LEIEStore
+    from aegis.sources.ofac_sam import OFACSAMStore
+    from aegis.sources.ori import ORIStore
+    from aegis.sources.retraction_watch import RetractionWatchStore
+    _leie_store = LEIEStore()
+    _ofac_sam_store = OFACSAMStore()
+    _ori_store = ORIStore()
+    _retraction_store = RetractionWatchStore()
+
+    async def _load_integrity_background() -> None:
+        """Download integrity data after startup so it doesn't block uvicorn binding."""
+        try:
+            stores = await asyncio.to_thread(load_integrity_stores)
+            nonlocal _leie_store, _ofac_sam_store, _ori_store, _retraction_store
+            _leie_store, _ofac_sam_store, _ori_store, _retraction_store = stores
+            logger.info("Integrity stores loaded in background")
+        except Exception:
+            logger.warning("Background integrity store load failed", exc_info=True)
+
+    @app.on_event("startup")
+    async def _startup() -> None:
+        asyncio.create_task(_load_integrity_background())
+
     async def _run_pipeline(
         job_id: str,
         body: QueryRequest,
@@ -132,7 +129,13 @@ def create_app(
             # 2. Execute the real pipeline
             from aegis.pipeline.orchestrator import QueryPipeline, SourceProgress
 
-            pipeline = QueryPipeline()
+            pipeline = QueryPipeline(
+                leie_store=_leie_store,
+                ofac_sam_store=_ofac_sam_store,
+                ori_store=_ori_store,
+                retraction_store=_retraction_store,
+                apex_store=_apex_store,
+            )
 
             query_id = job_id  # job_id IS the query_id for SSE + query store
 
@@ -143,6 +146,7 @@ def create_app(
                 task_description=body.task_description,
                 mesh_override=body.mesh_override,
                 k=body.k,
+                query_type_override=body.query_type_override,
                 progress_callback=_progress_callback,
             )
 

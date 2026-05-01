@@ -76,8 +76,12 @@ class QualityPrior:
 
         for family, weight in self._weights.weights.items():
             percentile = component_percentiles.get(family, 0.0)
-            # Clamp percentile to avoid log(0)
-            percentile = max(percentile, 1e-6)
+            # Clamp to avoid log(0). Floor of 0.01 prevents catastrophic
+            # penalties from missing data — a researcher who has no patents
+            # should not be treated identically to a proven fraud.
+            if weight == 0.0:
+                continue
+            percentile = max(percentile, 0.01)
             log_sum += weight * math.log(percentile)
             total_weight += weight
 

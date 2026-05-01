@@ -15,18 +15,28 @@ from pydantic import BaseModel, ConfigDict
 from aegis.api.schemas import ExpansionInfo
 from aegis.ingestion.converters import (
     grant_record_to_candidates,
+    lens_patent_to_candidates,
     openalex_work_to_candidates,
+    patent_record_to_candidates,
     pubmed_record_to_candidates,
     study_record_to_candidates,
 )
 from aegis.ingestion.record_ingester import RecordIngester
-from aegis.integrity.hard_gate import HardGateResult
+from aegis.integrity.hard_gate import HardGate, HardGateResult
 from aegis.query.classifier import QueryClassifier
 from aegis.query.llm_expansion import LlmQueryExpander
 from aegis.scoring.quality_prior import QualityPrior, WeightVector
 from aegis.scoring.rank import CandidateScoreInput, Ranker
 from aegis.scoring.result_format import RankedList
 from aegis.scoring.variance import Bootstrap, BootstrapInput, ScoreBand
+from aegis.sources.apex_rosters import ApexRosterStore
+from aegis.sources.icite import IciteClient
+from aegis.sources.leie import LEIEStore
+from aegis.sources.ofac_sam import OFACSAMStore
+from aegis.sources.lens import LensClient
+from aegis.sources.ori import ORIStore
+from aegis.sources.retraction_watch import RetractionWatchStore
+from aegis.sources.uspto import UsptoClient
 from aegis.privacy.demographic_blocklist import DemographicBlocklist
 from aegis.privacy.gate import GateDecision, PrivacyGate
 from aegis.privacy.opt_out import OptOutStore
@@ -87,10 +97,25 @@ class QueryPipeline:
         8. Compute bootstrap variance bands
     """
 
-    def __init__(self, *, db_path: str = "aegis.duckdb") -> None:
+    def __init__(
+        self,
+        *,
+        db_path: str = "aegis.duckdb",
+        leie_store: LEIEStore | None = None,
+        ofac_sam_store: OFACSAMStore | None = None,
+        ori_store: ORIStore | None = None,
+        retraction_store: RetractionWatchStore | None = None,
+        apex_store: ApexRosterStore | None = None,
+    ) -> None:
         self._db_path = db_path
         self._classifier = QueryClassifier()
         self._expander = LlmQueryExpander()
+        self._leie_store = leie_store or LEIEStore()
+        self._ofac_sam_store = ofac_sam_store or OFACSAMStore()
+        self._ori_store = ori_store or ORIStore()
+        self._retraction_store = retraction_store or RetractionWatchStore()
+        self._apex_store = apex_store
+        self._rcr_map: dict[str, float] = {}
 
     async def execute(
         self,
@@ -115,7 +140,7 @@ class QueryPipeline:
                 cached=False,
             )
         else:
-            expanded = self._expander.expand(task_description)
+            expanded = await asyncio.to_thread(self._expander.expand, task_description)
             mesh_terms = expanded.mesh_terms
             expansion_info = ExpansionInfo(
                 original_query=task_description,
@@ -126,16 +151,12 @@ class QueryPipeline:
             )
 
         # Step 2: Classify query type
+        classification = self._classifier.classify(task_description)
         if query_type_override:
-            from aegis.query.classifier import ClassificationResult
-
-            classification = self._classifier.classify(task_description)
             query_type = query_type_override
-            weight_vector = classification.weight_vector
         else:
-            classification = self._classifier.classify(task_description)
             query_type = classification.query_type
-            weight_vector = classification.weight_vector
+        weight_vector = classification.weight_vector
 
         # Step 3: Fetch from all sources in parallel
         ingester = RecordIngester(db_path=self._db_path)
@@ -143,13 +164,17 @@ class QueryPipeline:
             fetched_count, source_progress = await self._fetch_all_sources(
                 task_description, mesh_terms, progress_callback, ingester
             )
+            ingested_uuids = ingester.ingested_uuids
         finally:
             ingester.close()
 
-        # Step 4: Load existing candidates from DuckDB
+        # Step 4: Scoring isolation — only score candidates from this query
         store = CandidateStore(db_path=self._db_path)
         try:
-            all_candidates = store.list_by_cohort(None)
+            all_candidates = [
+                c for c in store.list_by_cohort(None)
+                if c.uuid in ingested_uuids
+            ]
         finally:
             store.close()
 
@@ -158,21 +183,63 @@ class QueryPipeline:
 
         total_after_dedup = len(all_candidates)
 
+        # Step 4c: iCite enrichment — fetch RCR scores for ingested PMIDs
+        self._rcr_map = {}
+        pmids = [p for c in all_candidates for p in c.artifact_refs.pmids]
+        if pmids:
+            try:
+                icite = IciteClient()
+                async for rec in icite.fetch_by_pmids(pmids[:200]):
+                    if rec.relative_citation_ratio is not None:
+                        self._rcr_map[rec.pmid] = rec.relative_citation_ratio
+                logger.info("iCite enrichment: %d RCR scores fetched", len(self._rcr_map))
+            except Exception:
+                logger.warning("iCite enrichment failed", exc_info=True)
+
         # Step 5: Compute scores
         score_inputs, f_scores = self._compute_scores(
             all_candidates, mesh_terms, task_description, weight_vector
         )
 
-        # Step 6: Run integrity hard gate (simplified — use score_inputs flags)
+        # Step 6: Run integrity hard gate
+        hard_gate = HardGate(
+            leie_store=self._leie_store,
+            ofac_sam_store=self._ofac_sam_store,
+            ori_store=self._ori_store,
+            retraction_store=self._retraction_store,
+        )
         integrity_results: dict[str, HardGateResult] = {}
+        query_mesh_set = {m.lower() for m in mesh_terms}
         for c in all_candidates:
-            integrity_results[c.uuid] = HardGateResult(
+            candidate_mesh = {m.descriptor.lower() for m in c.mesh_descriptors}
+            gate_result = hard_gate.evaluate(
                 candidate_uuid=c.uuid,
-                is_zero=False,
-                reason=None,
-                artifact_ref=None,
-                rules_evaluated=0,
+                candidate_name=c.name_variants[0] if c.name_variants else c.uuid,
+                candidate_mesh=candidate_mesh,
+                query_mesh=query_mesh_set,
             )
+            integrity_results[c.uuid] = gate_result
+            if gate_result.is_zero:
+                # Mark integrity_score=0 in the score inputs
+                for si in score_inputs:
+                    if si.candidate_uuid == c.uuid:
+                        score_inputs = [
+                            CandidateScoreInput(
+                                candidate_uuid=si.candidate_uuid,
+                                candidate_name=si.candidate_name,
+                                linkage_confidence=si.linkage_confidence,
+                                integrity_score=0.0,
+                                quality_percentile=si.quality_percentile,
+                                topical_fit=si.topical_fit,
+                                recency=si.recency,
+                                top_artifacts=si.top_artifacts,
+                                evidence_trail=si.evidence_trail,
+                            )
+                            if s.candidate_uuid == c.uuid
+                            else s
+                            for s in score_inputs
+                        ]
+                        break
 
         # Step 7: Rank
         ranker = Ranker(
@@ -220,11 +287,15 @@ class QueryPipeline:
 
         variance_bands: dict[str, ScoreBand] = {}
         if bootstrap_inputs:
-            variance_bands = bootstrap.estimate(
-                candidates=bootstrap_inputs,
-                weight_mean=(alpha, beta, gamma),
-                weight_cov=cov,
-                n_samples=200,
+            import functools
+            variance_bands = await asyncio.to_thread(
+                functools.partial(
+                    bootstrap.estimate,
+                    candidates=bootstrap_inputs,
+                    weight_mean=(alpha, beta, gamma),
+                    weight_cov=cov,
+                    n_samples=200,
+                )
             )
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
@@ -265,33 +336,17 @@ class QueryPipeline:
             "reporter",
             "ctgov",
             "openalex_works",
-            "openalex_grants",
+            "uspto",
         ]
-
-        tasks = [
-            self._fetch_source(name, query, mesh_terms, ingester)
-            for name in source_names
-        ]
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         progress_list: list[SourceProgress] = []
         total_records = 0
 
-        for i, result in enumerate(results):
-            name = source_names[i]
-            if isinstance(result, BaseException):
-                prog = SourceProgress(
-                    source_name=name,
-                    status="failed",
-                    record_count=0,
-                    latency_ms=0.0,
-                    error=str(result),
+        async def _fetch_and_report(name: str) -> SourceProgress:
+            try:
+                src_name, count, latency = await self._fetch_source(
+                    name, query, mesh_terms, ingester
                 )
-                logger.warning("Source %s failed: %s", name, result)
-            else:
-                src_name, count, latency = result
-                total_records += count
                 prog = SourceProgress(
                     source_name=src_name,
                     status="complete",
@@ -299,10 +354,29 @@ class QueryPipeline:
                     latency_ms=round(latency, 2),
                     error=None,
                 )
-
-            progress_list.append(prog)
+            except Exception as exc:
+                logger.warning("Source %s failed: %s", name, exc)
+                prog = SourceProgress(
+                    source_name=name,
+                    status="failed",
+                    record_count=0,
+                    latency_ms=0.0,
+                    error=str(exc),
+                )
+            # Emit immediately as this source finishes
             if progress_callback is not None:
                 progress_callback(prog)
+            return prog
+
+        tasks = [
+            asyncio.create_task(_fetch_and_report(name))
+            for name in source_names
+        ]
+
+        for prog in await asyncio.gather(*tasks):
+            progress_list.append(prog)
+            if prog.record_count:
+                total_records += prog.record_count
 
         return total_records, progress_list
 
@@ -343,7 +417,8 @@ class QueryPipeline:
 
                 rp_client = ReporterClient()
                 async for rp_rec in rp_client.fetch_grants_by_topic(
-                    rcdc_terms=mesh_terms
+                    rcdc_terms=mesh_terms,
+                    query_text=query,
                 ):
                     for candidate in grant_record_to_candidates(rp_rec):
                         ingester.ingest(candidate)
@@ -356,8 +431,8 @@ class QueryPipeline:
                 from aegis.sources.ctgov import CtgovClient
 
                 ct_client = CtgovClient()
-                async for ct_rec in ct_client.fetch_studies_by_condition(
-                    mesh_terms=mesh_terms
+                async for ct_rec in ct_client.fetch_studies_by_text(
+                    query_text=query[:200]
                 ):
                     for candidate in study_record_to_candidates(ct_rec):
                         ingester.ingest(candidate)
@@ -378,19 +453,17 @@ class QueryPipeline:
                         break
                 ingester.log_summary("openalex_works")
 
-            elif source_name == "openalex_grants":
-                from aegis.sources.openalex import FUNDER_IDS, OpenAlexClient
-
-                oag_client = OpenAlexClient()
-                for funder_name in FUNDER_IDS:
-                    async for _record in oag_client.get_grants_by_funder(
-                        funder_name, since_year=date.today().year - 5
-                    ):
-                        count += 1
-                        if count >= 100:
-                            break
-                    if count >= 100:
+            elif source_name == "uspto":
+                # PatentsView is defunct post-March 2026 migration; use Lens.org instead
+                lens_client = LensClient(api_token=os.environ.get("LENS_API_TOKEN"))
+                since = date.today().replace(year=date.today().year - 5)
+                async for lens_rec in lens_client.search_by_text(query, since=since):
+                    for candidate in lens_patent_to_candidates(lens_rec):
+                        ingester.ingest(candidate)
+                    count += 1
+                    if count >= 200:
                         break
+                ingester.log_summary("uspto")
 
         except Exception as exc:
             latency = (time.monotonic() - start) * 1000
@@ -430,55 +503,64 @@ class QueryPipeline:
 
         # Compute per-candidate raw sub-scores
         f_raw: dict[str, list[tuple[str, float]]] = {
-            f"f{i}": [] for i in range(1, 7)
+            f"f{i}": [] for i in range(1, 8)
         }
 
         for c in candidates:
-            # F1: Research output quality.
-            # PMIDs are the primary signal (20 pubs = max). NCT IDs give partial
-            # credit for trial leadership so CT.gov-only PIs aren't scored at zero.
-            pub_count = len(c.artifact_refs.pmids)
-            nct_count = len(c.artifact_refs.nct_ids)
-            f1_raw = min(1.0, pub_count / 20.0 + nct_count / 15.0)
+            pmids = c.artifact_refs.pmids
+            nct_ids = c.artifact_refs.nct_ids
+            grant_ids = c.artifact_refs.grant_ids
+            patent_ids = c.artifact_refs.patent_ids
+
+            # F1: Research output quality — use RCR if available, else pub count
+            rcr_vals = [self._rcr_map[p] for p in pmids if p in self._rcr_map]
+            if rcr_vals:
+                f1_raw = min(1.0, sum(rcr_vals) / len(rcr_vals) / 5.0)
+            else:
+                f1_raw = min(1.0, len(pmids) / 20.0)
             f_raw["f1"].append((c.uuid, f1_raw))
 
-            # F2: Funding (based on grant count)
-            grant_count = len(c.artifact_refs.grant_ids)
-            f2_raw = min(1.0, grant_count / 5.0)
+            # F2: Funding (grant count, now includes OpenAlex international grants)
+            f2_raw = min(1.0, len(grant_ids) / 5.0)
             f_raw["f2"].append((c.uuid, f2_raw))
 
-            # F3: Leadership (based on evidence trail mentions)
-            leadership_hits = sum(
-                1
-                for e in c.evidence_trail
-                if "PI" in e.upper()
-                or "lead" in e.lower()
-                or "principal" in e.lower()
+            # F3: Leadership (count evidence_trail entries with "Principal Investigator")
+            pi_hits = sum(
+                1 for e in c.evidence_trail if "Principal Investigator" in e
             )
-            f3_raw = min(1.0, leadership_hits / 3.0)
+            f3_raw = min(1.0, pi_hits / 3.0)
             f_raw["f3"].append((c.uuid, f3_raw))
 
-            # F4: Apex roster membership (based on evidence trail)
-            apex_hits = sum(
-                1
-                for e in c.evidence_trail
-                if "apex" in e.lower()
-                or "fellow" in e.lower()
-                or "award" in e.lower()
-            )
-            f4_raw = min(1.0, apex_hits / 2.0)
+            # F4: Apex roster membership — use real store lookup
+            name = c.name_variants[0] if c.name_variants else ""
+            if self._apex_store and name and self._apex_store.lookup_by_name(name):
+                f4_raw = 1.0
+            else:
+                f4_raw = 0.0
             f_raw["f4"].append((c.uuid, f4_raw))
 
-            # F5: Translational (based on trial count + patent count)
-            trial_count = len(c.artifact_refs.nct_ids)
-            patent_count = len(c.artifact_refs.patent_ids)
-            f5_raw = min(1.0, (trial_count + patent_count) / 5.0)
+            # F5: Translational (trials + patents)
+            f5_raw = min(1.0, (len(nct_ids) + len(patent_ids)) / 5.0)
             f_raw["f5"].append((c.uuid, f5_raw))
 
-            # F6: Lineage (use publication breadth as proxy)
+            # F6: Lineage (publication breadth via unique MeSH)
             unique_mesh = len({m.descriptor for m in c.mesh_descriptors})
             f6_raw = min(1.0, unique_mesh / 10.0)
             f_raw["f6"].append((c.uuid, f6_raw))
+
+            # F7: Clinician-specific
+            k_award_count = sum(
+                1 for g in grant_ids
+                if g.startswith("K08") or g.startswith("K23") or g.startswith("K24")
+            )
+            clinical_pi = 1.0 if len(nct_ids) > 0 else 0.0
+            clinical_affil = 1.0 if any(
+                kw in (aff.canonical_name or "").lower()
+                for aff in c.affiliations
+                for kw in ("hospital", "medical center", "clinic")
+            ) else 0.0
+            f7_raw = min(1.0, (k_award_count / 3.0 + clinical_pi + clinical_affil) / 3.0)
+            f_raw["f7"].append((c.uuid, f7_raw))
 
         # Convert raw scores to percentiles within cohort
         f_percentiles: dict[str, dict[str, float]] = {}
@@ -491,19 +573,27 @@ class QueryPipeline:
             f_percentiles[family] = percentiles
 
         # Compute quality prior using QualityPrior
+        _FAMILY_LABELS = {
+            1: "rcr", 2: "funding", 3: "leadership", 4: "apex",
+            5: "translational", 6: "lineage", 7: "clinician",
+        }
         qp = QualityPrior(weight_vector)
         quality_inputs: list[tuple[str, dict[str, float]]] = []
         for c in candidates:
             component = {
-                f"f{i}_rcr" if i == 1 else f"f{i}_funding" if i == 2 else f"f{i}_leadership" if i == 3 else f"f{i}_apex" if i == 4 else f"f{i}_translational" if i == 5 else f"f{i}_lineage": f_percentiles[f"f{i}"][c.uuid]
-                for i in range(1, 7)
+                f"f{i}_{_FAMILY_LABELS[i]}": f_percentiles[f"f{i}"][c.uuid]
+                for i in range(1, 8)
             }
             quality_inputs.append((c.uuid, component))
 
         quality_scores = qp.compute_percentiles(quality_inputs)
 
-        # Compute topical fit
+        # Compute topical fit — source-agnostic word-coverage score.
+        # Uses query words against the full searchable text (name + MeSH + evidence).
+        # Avoids the MeSH-bonus formula which systematically favoured PubMed
+        # candidates (NLM-indexed MeSH) over Reporter/CT.gov (RCDC categories).
         topical_fits: dict[str, float] = {}
+        n_query_words = max(len(query_words), 1)
         for c in candidates:
             text = " ".join(
                 c.name_variants
@@ -511,15 +601,7 @@ class QueryPipeline:
                 + c.evidence_trail
             ).lower()
             hits = sum(1 for w in query_words if w in text)
-            mesh_hits = sum(
-                1
-                for m in c.mesh_descriptors
-                if m.descriptor.lower() in query_mesh_set
-            )
-            topical_fits[c.uuid] = min(
-                1.0,
-                (hits + mesh_hits * 2) / max(len(query_words) + len(query_mesh_set), 1),
-            )
+            topical_fits[c.uuid] = hits / n_query_words
 
         # Compute recency based on last_updated_per_source
         recency_scores: dict[str, float] = {}

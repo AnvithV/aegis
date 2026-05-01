@@ -8,6 +8,7 @@ export interface QueryRequest {
   mesh_override?: string[];
   k?: number; // default 20, range 5-100
   cutoff_strategy?: string;
+  query_type_override?: string;
 }
 
 // ===== Candidate Result (per candidate in ranked list) =====

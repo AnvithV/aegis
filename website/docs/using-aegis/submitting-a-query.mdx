@@ -1,0 +1,50 @@
+---
+sidebar_position: 1
+title: Submitting a Query
+---
+
+# Submitting a Query
+
+The New Query page is the starting point for expert discovery. Task managers describe the expertise they need in free text, and Aegis handles the rest: MeSH expansion, multi-source fetching, scoring, and ranking.
+
+## The Query Form
+
+The form has three main fields:
+
+- **Task Description** (required) -- Free-text description of the expertise needed. For example: *"KRAS inhibitor drug discovery for lung cancer"* or *"RAS oncogene translational research pancreatic cancer"*.
+- **Population Selector** -- Choose Translational, Drug Discovery, Clinician, or leave on Auto to let the classifier decide.
+- **K Slider** -- The number of top candidates to return (default: 20).
+
+## Query Type Classification
+
+As you type into the Task Description field (after 5 characters), Aegis automatically classifies the query into one of four types:
+
+| Query Type | Description | Weight Vector |
+|---|---|---|
+| `basic_research` | Fundamental science, mechanisms of action | Default weights |
+| `drug_discovery` | Therapeutics development, compound screening | Emphasizes patent and translational signals |
+| `clinical_trial_pi` | Trial investigators, clinical expertise | Emphasizes trial record and clinical credentials |
+| `policy_epi` | Epidemiology, health policy, population health | Emphasizes publication breadth and grant diversity |
+
+A badge appears next to the Task Description label showing the detected type and confidence level. You can click the badge to override the classification if needed.
+
+Each query type selects a weight vector from `config/aegis/weights/` that adjusts how quality, topical fit, recency, and integrity signals are balanced.
+
+## Advanced Options
+
+Expanding the Advanced Options panel reveals additional controls:
+
+- **MeSH Term Inspector** -- View and edit the MeSH terms that Aegis expanded from your query text. Add or remove terms to refine the search scope.
+- **Weight Sliders** -- Adjust the alpha (Quality Prior), beta (Topical Fit), and gamma (Recency) exponents to control how much each scoring dimension influences the final ranking.
+- **MeSH Override** -- Manually specify MeSH descriptors instead of relying on automatic expansion.
+- **Cutoff Strategy** -- Optionally set a strategy (e.g., `score_threshold`, `elbow`) to determine how candidates below the quality threshold are filtered.
+
+## What Happens on Submit
+
+When you click **Submit Query**, Aegis:
+
+1. Sends a POST request to `/v1/queries`.
+2. The backend returns **HTTP 202** immediately with a `job_id` and `status: "in_progress"`. The request does not block.
+3. The browser redirects to `/jobs/{job_id}` where you can monitor the pipeline as it fetches from each source.
+
+The pipeline typically takes 30--60 seconds to complete, depending on the number of sources and results. You can submit multiple queries without waiting for earlier ones to finish.

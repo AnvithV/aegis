@@ -5,15 +5,14 @@ title: Data Sources
 
 # Data Sources
 
-Aegis ingests data from approximately 25 sources across seven categories. Each source feeds into one or more of the three researcher populations (Translational, Drug Discovery, Clinician) and is refreshed on a defined cadence. The tables below list every source, what it provides, how often it is refreshed, and which populations it serves.
+Aegis ingests data from approximately 20 sources across seven categories. Each source feeds into one or more of the three researcher populations (Translational, Drug Discovery, Clinician) and is refreshed on a defined cadence. The tables below list every source, what it provides, how often it is refreshed, and which populations it serves.
 
 ## Publications
 
 | Source | What It Provides | Refresh Cadence | Population(s) |
 |--------|-----------------|-----------------|---------------|
 | PubMed | Indexed biomedical publications with MeSH descriptors, author affiliations, article types, and publication dates | Weekly | Translational, Clinician |
-| bioRxiv | Preprint publications in biology, providing early signal on active research before peer review | Daily | Translational |
-| medRxiv | Preprint publications in health sciences and clinical research | Daily | Translational, Clinician |
+| OpenAlex Works | Global scholarly works covering 250M+ records with author disambiguation, concepts, and institution mappings | Weekly | Translational |
 | iCite | NIH citation metrics including Relative Citation Ratio (RCR), which normalizes citation counts by field and time | Weekly | Translational |
 
 ## Grants
@@ -21,12 +20,7 @@ Aegis ingests data from approximately 25 sources across seven categories. Each s
 | Source | What It Provides | Refresh Cadence | Population(s) |
 |--------|-----------------|-----------------|---------------|
 | NIH RePORTER | US federal research grants with principal investigators, activity codes, funding amounts, and active/inactive status | Weekly | Translational |
-| ERC (European Research Council) | European research grants for frontier research across all disciplines | Weekly | Translational |
-| Horizon Europe | EU framework programme grants covering collaborative and individual research funding | Weekly | Translational |
-| MRC (Medical Research Council) | UK medical research grants with investigator details and project descriptions | Weekly | Translational |
-| CIHR (Canadian Institutes of Health Research) | Canadian health research grants with investigator and funding data | Weekly | Translational |
-| JST/KAKEN | Japanese research grants from the Japan Science and Technology Agency and KAKEN database, with Japanese name transliteration support | Weekly | Translational |
-| NSFC (National Natural Science Foundation of China) | Chinese research grants with investigator and project data; records include a coverage caveat for transparency | Weekly | Translational |
+| OpenAlex Grants | Global grant funding data covering major international funders including ERC, Wellcome Trust, DFG, and others | Weekly | Translational |
 
 ## Patents
 
@@ -71,6 +65,4 @@ Aegis ingests data from approximately 25 sources across seven categories. Each s
 
 ## Geographic Coverage
 
-Aegis currently draws approximately 15% of its candidate data from non-US sources. Phase 2 established the initial international source clients (EPO, ERC, MRC, CIHR, JST/KAKEN, NSFC), and Phase 3 broadened geographic coverage with expanded ROR-normalized affiliations across JP, CN, GB, CA, EU, and AU institutions. The system includes per-region coverage diagnostics with a 75% bias threshold that triggers caveats in API responses when geographic representation is skewed.
-
-The target is 40%+ non-US candidate coverage after Phase 3 geographic broadening is fully deployed, with ongoing tracking of per-region ratios and regression alerting to ensure coverage does not regress.
+Aegis achieves international coverage primarily through OpenAlex, which indexes scholarly output from institutions and funders worldwide. OpenAlex Works provides global publication data with author disambiguation and institutional affiliations, while OpenAlex Grants covers major international funders including the European Research Council, Wellcome Trust, Deutsche Forschungsgemeinschaft, and others. The system includes per-region coverage diagnostics with a 75% bias threshold that triggers caveats in API responses when geographic representation is skewed.

@@ -2,10 +2,10 @@ version: 1
 specialty: basic_research
 created: "2026-04-27"
 weights:
-  f1_rcr: 0.40
+  f1_rcr: 0.45
   f2_funding: 0.20
   f3_leadership: 0.20
-  f4_apex: 0.05
+  f4_apex: 0.00
   f5_translational: 0.05
   f6_lineage: 0.10
 exponents:
