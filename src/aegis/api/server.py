@@ -33,6 +33,7 @@ from aegis.api.schemas import (
     ErrorResponse,
     QueryRequest,
 )
+from aegis.config import get_data_dir
 from aegis.api import feedback as feedback_mod
 from aegis.api import hitl as hitl_mod
 from aegis.api import refit as refit_mod
@@ -76,7 +77,7 @@ def create_app(
 
     # Initialize components with defaults
     _audit_log = AuditLog(
-        storage_path=audit_log_path or Path("data/aegis/audit_log.jsonl")
+        storage_path=audit_log_path or (get_data_dir() / "audit_log.jsonl")
     )
     _rate_limiter = rate_limiter or RateLimiterRegistry()
     _circuit_breaker = circuit_breaker or StalenessCircuitBreaker()

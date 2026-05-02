@@ -12,6 +12,7 @@ import yaml  # type: ignore[import-untyped]
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+from aegis.config import get_data_dir
 from aegis.scoring.quality_prior import WeightVector
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,10 @@ router = APIRouter(prefix="/v1/refit", tags=["refit"])
 
 _WEIGHTS_DIR = Path(os.environ.get("AEGIS_WEIGHTS_DIR", "config/aegis/weights"))
 _AUDIT_JUDGMENTS = Path(
-    os.environ.get("AEGIS_AUDIT_JUDGMENTS", "data/aegis/audit_judgments.jsonl")
+    os.environ.get("AEGIS_AUDIT_JUDGMENTS", str(get_data_dir() / "audit_judgments.jsonl"))
 )
 _DOWNSTREAM_STORE = Path(
-    os.environ.get("AEGIS_DOWNSTREAM_STORE", "data/aegis/downstream_quality.jsonl")
+    os.environ.get("AEGIS_DOWNSTREAM_STORE", str(get_data_dir() / "downstream_quality.jsonl"))
 )
 
 

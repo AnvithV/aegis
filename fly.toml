@@ -5,6 +5,7 @@ primary_region = "sjc"  # San Jose — closest to you
 
 [env]
   AEGIS_DB_PATH = "/data/aegis.duckdb"
+  AEGIS_DATA_DIR = "/data/aegis"
   AEGIS_REFRESH_INTERVAL_HOURS = "6"
 
 [mounts]

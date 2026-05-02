@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from aegis.config import get_db_path
 from aegis.identity.probabilistic import ProbabilisticLinker
 from aegis.identity.ror import RorResolver
 from aegis.storage.candidate_store import CandidateStore
@@ -89,7 +90,8 @@ class RecordIngester:
     so that cross-source matching does not require repeated full-table scans.
     """
 
-    def __init__(self, db_path: str = "aegis.duckdb") -> None:
+    def __init__(self, db_path: str | None = None) -> None:
+        db_path = db_path or get_db_path()
         self._store = CandidateStore(db_path=db_path)
         self._cache: dict[tuple[str, str], str] = {}
         self.new_count = 0
