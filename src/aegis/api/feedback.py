@@ -1,9 +1,11 @@
-"""Feedback API: POST /v1/feedback/tasks/{task_id}/outcomes."""
+"""Feedback API: task outcomes and per-candidate judgments."""
 
 from __future__ import annotations
 
+import json as json_mod
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 from fastapi import APIRouter, status
@@ -14,6 +16,7 @@ from aegis.learning.downstream_quality import (
     TaskOutcome,
     TaskOutcomeCandidate,
 )
+from aegis.learning.plackett_luce import JudgmentRecord
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +112,9 @@ class TaskOutcomeResponse(BaseModel):
     derived_judgments_count: int
 
 
-# Module-level store path (will be overridden in tests via monkeypatch)
+# Module-level store paths
 _default_store_path = Path("data/aegis/downstream_quality.jsonl")
+_default_judgments_path = Path("data/aegis/candidate_judgments.jsonl")
 
 
 def _get_store(store_path: Path | None = None) -> DownstreamQualityStore:
@@ -171,3 +175,125 @@ def submit_task_outcome(
         outcome_count=store.count(),
         derived_judgments_count=derived_count,
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-candidate judgments (thumbs up / X mark)
+# ---------------------------------------------------------------------------
+
+
+class CandidateJudgment(StrEnum):
+    """Judgment type for a single candidate."""
+
+    relevant = "relevant"
+    irrelevant = "irrelevant"
+
+
+class CandidateJudgmentRequest(BaseModel):
+    """Request to judge a single candidate within a query."""
+
+    model_config = ConfigDict(frozen=True)
+
+    query_id: str
+    candidate_uuid: str
+    judgment: CandidateJudgment
+    score_components: dict[str, float]
+
+
+class CandidateJudgmentResponse(BaseModel):
+    """Response after recording a candidate judgment."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: str
+    derived_pairs: int
+
+
+def _load_judgments(path: Path) -> list[dict]:  # type: ignore[type-arg]
+    """Load all candidate judgments from JSONL."""
+    if not path.exists():
+        return []
+    results = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            stripped = line.strip()
+            if stripped:
+                results.append(json_mod.loads(stripped))
+    return results
+
+
+def _judgments_for_query(path: Path, query_id: str) -> list[dict]:  # type: ignore[type-arg]
+    """Get all judgments for a specific query."""
+    return [j for j in _load_judgments(path) if j.get("query_id") == query_id]
+
+
+def derive_pairwise_from_judgments(
+    judgments: list[dict],  # type: ignore[type-arg]
+) -> list[JudgmentRecord]:
+    """Derive pairwise JudgmentRecords from per-candidate judgments.
+
+    Every irrelevant candidate generates a pair against every relevant candidate.
+    """
+    relevant = [j for j in judgments if j["judgment"] == "relevant"]
+    irrelevant = [j for j in judgments if j["judgment"] == "irrelevant"]
+
+    pairs: list[JudgmentRecord] = []
+    for winner in relevant:
+        ws = winner["score_components"]
+        for loser in irrelevant:
+            ls = loser["score_components"]
+            pairs.append(
+                JudgmentRecord(
+                    winner_scores={
+                        "quality_prior": ws.get("Q", ws.get("quality_prior", 0.5)),
+                        "topical_fit": ws.get("C", ws.get("topical_fit", 0.5)),
+                        "recency": ws.get("R", ws.get("recency", 0.5)),
+                    },
+                    loser_scores={
+                        "quality_prior": ls.get("Q", ls.get("quality_prior", 0.5)),
+                        "topical_fit": ls.get("C", ls.get("topical_fit", 0.5)),
+                        "recency": ls.get("R", ls.get("recency", 0.5)),
+                    },
+                )
+            )
+    return pairs
+
+
+@router.post(
+    "/candidates/judge",
+    response_model=CandidateJudgmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def judge_candidate(body: CandidateJudgmentRequest) -> CandidateJudgmentResponse:
+    """Record a thumbs-up (relevant) or X (irrelevant) judgment for a candidate."""
+    path = _default_judgments_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    record = {
+        "query_id": body.query_id,
+        "candidate_uuid": body.candidate_uuid,
+        "judgment": body.judgment.value,
+        "score_components": body.score_components,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    with open(path, mode="a", encoding="utf-8") as fh:
+        fh.write(json_mod.dumps(record) + "\n")
+
+    # Derive pairs from all judgments for this query
+    query_judgments = _judgments_for_query(path, body.query_id)
+    pairs = derive_pairwise_from_judgments(query_judgments)
+
+    return CandidateJudgmentResponse(
+        status="accepted",
+        derived_pairs=len(pairs),
+    )
+
+
+@router.get("/candidates/judgments/{query_id}")
+def get_candidate_judgments(query_id: str) -> dict:
+    """Get all candidate judgments for a query."""
+    judgments = _judgments_for_query(_default_judgments_path, query_id)
+    return {
+        "query_id": query_id,
+        "judgments": {j["candidate_uuid"]: j["judgment"] for j in judgments},
+    }

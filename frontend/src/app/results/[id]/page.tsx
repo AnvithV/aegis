@@ -29,6 +29,7 @@ export default function ResultsPage() {
     beta: 1,
     gamma: 1,
   });
+  const [judgments, setJudgments] = useState<Record<string, "relevant" | "irrelevant">>({});
 
   const sseState = useSSE({ queryId, enabled: loading });
 
@@ -103,8 +104,46 @@ export default function ResultsPage() {
   useEffect(() => {
     if (queryId) {
       fetchQuery();
+      // Load existing judgments for this query
+      fetch(`/api/feedback/candidates/judgments/${queryId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.judgments) setJudgments(data.judgments);
+        })
+        .catch(() => {});
     }
   }, [queryId, fetchQuery]);
+
+  const handleJudge = useCallback(
+    async (uuid: string, judgment: "relevant" | "irrelevant") => {
+      // Toggle off if already set to the same judgment
+      if (judgments[uuid] === judgment) return;
+
+      setJudgments((prev) => ({ ...prev, [uuid]: judgment }));
+
+      const candidate = query?.candidates.find((c) => c.uuid === uuid);
+      try {
+        await fetch("/api/feedback/candidates/judge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query_id: queryId,
+            candidate_uuid: uuid,
+            judgment,
+            score_components: candidate?.score_components ?? {},
+          }),
+        });
+      } catch {
+        // Revert on failure
+        setJudgments((prev) => {
+          const next = { ...prev };
+          delete next[uuid];
+          return next;
+        });
+      }
+    },
+    [queryId, query, judgments]
+  );
 
   // Client-side re-ranking when exponents change
   const rankedCandidates = useMemo(() => {
@@ -236,6 +275,9 @@ export default function ResultsPage() {
                 <CandidateRow
                   key={candidate.uuid}
                   candidate={candidate}
+                  queryId={queryId}
+                  judgment={judgments[candidate.uuid] ?? null}
+                  onJudge={handleJudge}
                   isCompareSelected={selectedForCompare.has(candidate.uuid)}
                   onToggleCompare={() => toggleCompare(candidate.uuid)}
                 />

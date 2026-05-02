@@ -5,13 +5,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { JobRecord } from "@/types/api";
 
-const SOURCE_NAMES = ["pubmed", "reporter", "ctgov", "openalex_works", "openalex_grants"];
+const SOURCE_NAMES = ["pubmed", "reporter", "ctgov", "openalex_works"];
 const SOURCE_LABELS: Record<string, string> = {
   pubmed: "PubMed",
   reporter: "NIH Reporter",
   ctgov: "CT.gov",
-  openalex_works: "OpenAlex Works",
-  openalex_grants: "OpenAlex Grants",
+  openalex_works: "OpenAlex",
 };
 
 interface SourceData {
