@@ -254,6 +254,14 @@ class SteadyStateRefitter:
             specialty=specialty,
         )
 
+        # 2b. Load per-candidate judgments (thumbs up / X)
+        from aegis.api.feedback import _default_judgments_path, _load_judgments, derive_pairwise_from_judgments
+
+        candidate_judgments = derive_pairwise_from_judgments(
+            _load_judgments(_default_judgments_path)
+        )
+        downstream_judgments.extend(candidate_judgments)
+
         # 3. Merge with source weighting
         merged, source_breakdown = self._merge_judgments(
             audit=audit_judgments,

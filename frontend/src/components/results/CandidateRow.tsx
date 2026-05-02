@@ -18,14 +18,22 @@ const SOURCE_BADGE_COLORS: Record<string, string> = {
   leie: "bg-red-400",
 };
 
+type CandidateJudgment = "relevant" | "irrelevant" | null;
+
 interface CandidateRowProps {
   candidate: CandidateResult;
+  queryId?: string;
+  judgment?: CandidateJudgment;
+  onJudge?: (uuid: string, judgment: "relevant" | "irrelevant") => void;
   isCompareSelected?: boolean;
   onToggleCompare?: () => void;
 }
 
 export default function CandidateRow({
   candidate,
+  queryId,
+  judgment,
+  onJudge,
   isCompareSelected,
   onToggleCompare,
 }: CandidateRowProps) {
@@ -158,6 +166,40 @@ export default function CandidateRow({
 
           {/* Score section + actions */}
           <div className="flex-shrink-0 ml-4 flex items-start gap-3">
+            {/* Candidate judgment buttons */}
+            {onJudge && (
+              <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => onJudge(candidate.uuid, "relevant")}
+                  className={`p-1 rounded transition-colors ${
+                    judgment === "relevant"
+                      ? "text-green-600 bg-green-50"
+                      : "text-gray-300 hover:text-green-500 hover:bg-green-50"
+                  }`}
+                  title="Good candidate"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onJudge(candidate.uuid, "irrelevant")}
+                  className={`p-1 rounded transition-colors ${
+                    judgment === "irrelevant"
+                      ? "text-red-600 bg-red-50"
+                      : "text-gray-300 hover:text-red-500 hover:bg-red-50"
+                  }`}
+                  title="Wrong field / irrelevant"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             {/* Shortlist star */}
             <button
               type="button"
