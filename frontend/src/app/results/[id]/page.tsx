@@ -30,6 +30,9 @@ export default function ResultsPage() {
     gamma: 1,
   });
   const [judgments, setJudgments] = useState<Record<string, "relevant" | "irrelevant">>({});
+  const [shortlists, setShortlists] = useState<Array<{ id: string; name: string; member_count?: number }>>([]);
+  // Map: candidateUuid -> Set of shortlistIds they belong to
+  const [candidateShortlistMap, setCandidateShortlistMap] = useState<Map<string, Set<string>>>(new Map());
 
   const sseState = useSSE({ queryId, enabled: loading });
 
@@ -101,9 +104,43 @@ export default function ResultsPage() {
     }
   }, [queryId]);
 
+  // Fetch shortlists and build candidateUuid -> shortlistIds map
+  const fetchShortlists = useCallback(async () => {
+    try {
+      const slRes = await fetch("/api/shortlists");
+      if (!slRes.ok) return;
+      const slData = await slRes.json();
+      const slArray: Array<{ id: string; name: string; member_count?: number; members?: Array<{ candidate_uuid: string }> }> =
+        Array.isArray(slData) ? slData : slData.shortlists ?? [];
+      setShortlists(slArray.map((sl) => ({ id: sl.id, name: sl.name, member_count: sl.member_count })));
+
+      // Build membership map from shortlist details (need to fetch each one for members)
+      const memberMap = new Map<string, Set<string>>();
+      const detailFetches = await Promise.allSettled(
+        slArray.map((sl) => fetch(`/api/shortlists/${sl.id}`).then((r) => r.json()))
+      );
+      for (const result of detailFetches) {
+        if (result.status === "fulfilled" && result.value) {
+          const detail = result.value as { id: string; members?: Array<{ candidate_uuid: string }> };
+          if (detail.members) {
+            for (const member of detail.members) {
+              const existing = memberMap.get(member.candidate_uuid) ?? new Set();
+              existing.add(detail.id);
+              memberMap.set(member.candidate_uuid, existing);
+            }
+          }
+        }
+      }
+      setCandidateShortlistMap(memberMap);
+    } catch {
+      // Shortlist data is optional
+    }
+  }, []);
+
   useEffect(() => {
     if (queryId) {
       fetchQuery();
+      fetchShortlists();
       // Load existing judgments for this query
       fetch(`/api/feedback/candidates/judgments/${queryId}`)
         .then((r) => r.json())
@@ -112,7 +149,7 @@ export default function ResultsPage() {
         })
         .catch(() => {});
     }
-  }, [queryId, fetchQuery]);
+  }, [queryId, fetchQuery, fetchShortlists]);
 
   const handleJudge = useCallback(
     async (uuid: string, judgment: "relevant" | "irrelevant") => {
@@ -143,6 +180,63 @@ export default function ResultsPage() {
       }
     },
     [queryId, query, judgments]
+  );
+
+  const handleShortlistAdd = useCallback(
+    async (candidateUuid: string, candidateName: string, shortlistId: string) => {
+      try {
+        await fetch(`/api/shortlists/${shortlistId}/candidates`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ candidate_uuid: candidateUuid, candidate_name: candidateName }),
+        });
+        // Optimistic update
+        setCandidateShortlistMap((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(candidateUuid) ?? new Set();
+          existing.add(shortlistId);
+          next.set(candidateUuid, new Set(existing));
+          return next;
+        });
+        fetchShortlists(); // refresh counts
+      } catch {
+        // silently fail
+      }
+    },
+    [fetchShortlists]
+  );
+
+  const handleShortlistCreate = useCallback(
+    async (candidateUuid: string, candidateName: string, newName: string) => {
+      try {
+        const createRes = await fetch("/api/shortlists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newName }),
+        });
+        if (!createRes.ok) return;
+        const created = await createRes.json();
+        if (created.id) {
+          await fetch(`/api/shortlists/${created.id}/candidates`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidate_uuid: candidateUuid, candidate_name: candidateName }),
+          });
+          // Optimistic update
+          setCandidateShortlistMap((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(candidateUuid) ?? new Set();
+            existing.add(created.id);
+            next.set(candidateUuid, new Set(existing));
+            return next;
+          });
+        }
+        fetchShortlists(); // refresh list + counts
+      } catch {
+        // silently fail
+      }
+    },
+    [fetchShortlists]
   );
 
   // Client-side re-ranking when exponents change
@@ -280,6 +374,10 @@ export default function ResultsPage() {
                   onJudge={handleJudge}
                   isCompareSelected={selectedForCompare.has(candidate.uuid)}
                   onToggleCompare={() => toggleCompare(candidate.uuid)}
+                  shortlists={shortlists}
+                  candidateShortlistIds={candidateShortlistMap.get(candidate.uuid)}
+                  onShortlistAdd={handleShortlistAdd}
+                  onShortlistCreate={handleShortlistCreate}
                 />
               ))}
             </div>
