@@ -16,8 +16,6 @@ const SOURCE_BADGE_COLORS: Record<string, string> = {
   ctgov: "bg-purple-400",
   openalex: "bg-orange-400",
   leie: "bg-red-400",
-  uspto: "bg-yellow-400",
-  epo: "bg-indigo-400",
 };
 
 interface CandidateRowProps {
@@ -113,6 +111,20 @@ export default function CandidateRow({
                 )}
               </div>
               <p className="text-sm text-gray-500 mt-0.5">{candidate.affiliation}</p>
+
+              {/* Contact email */}
+              {candidate.contact_email && (
+                <a
+                  href={`mailto:${candidate.contact_email}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline mt-0.5"
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  {candidate.contact_email}
+                </a>
+              )}
 
               {/* Source badges */}
               {candidate.source_badges && candidate.source_badges.length > 0 && (

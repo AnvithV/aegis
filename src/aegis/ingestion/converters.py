@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json as json_mod
+import re
 import unicodedata
 from datetime import UTC, datetime
 
 from aegis.sources.ctgov import StudyRecord
-from aegis.sources.lens import LensPatentRecord
 from aegis.sources.openalex import OpenAlexWork
 from aegis.sources.pubmed import PubMedRecord
 from aegis.sources.reporter import GrantRecord
-from aegis.sources.uspto import PatentRecord
 from aegis.storage.schema import AffiliationSpan, ArtifactRefBundle, Candidate, MeshDescriptor
+
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,15 @@ def _make_uuid(strong_keys: dict[str, str], name: str, affiliation: str = "") ->
 # ---------------------------------------------------------------------------
 # PubMed
 # ---------------------------------------------------------------------------
+
+
+def _extract_email(affiliations: list[str]) -> str | None:
+    """Extract email address from PubMed affiliation strings (corresponding author)."""
+    for aff in affiliations:
+        match = _EMAIL_RE.search(aff)
+        if match:
+            return match.group()
+    return None
 
 
 def pubmed_record_to_candidates(record: PubMedRecord) -> list[Candidate]:
@@ -106,6 +116,7 @@ def pubmed_record_to_candidates(record: PubMedRecord) -> list[Candidate]:
                 ],
                 last_updated_per_source={"pubmed": datetime.now(UTC)},
                 mesh_descriptors=list(record.mesh_descriptors[:30]),
+                contact_email=_extract_email(author.affiliations),
             )
         )
     return results
@@ -307,86 +318,3 @@ def openalex_work_to_candidates(record: OpenAlexWork) -> list[Candidate]:
     return results
 
 
-# ---------------------------------------------------------------------------
-# USPTO Patents
-# ---------------------------------------------------------------------------
-
-
-def patent_record_to_candidates(record: PatentRecord) -> list[Candidate]:
-    """Extract lead inventors (or first inventor if none marked lead)."""
-    lead = [i for i in record.inventors if i.is_lead_inventor]
-    if not lead and record.inventors:
-        lead = [record.inventors[0]]
-
-    results: list[Candidate] = []
-    for inventor in lead:
-        name = inventor.full_name.strip()
-        if not name:
-            continue
-
-        uuid = _make_uuid({}, name)
-        title_short = record.title[:80] if record.title else record.patent_number
-
-        results.append(
-            Candidate(
-                uuid=uuid,
-                strong_keys={},
-                name_variants=[name],
-                affiliations=[],
-                artifact_refs=ArtifactRefBundle(
-                    pmids=[],
-                    nct_ids=[],
-                    grant_ids=[],
-                    patent_ids=[record.patent_number],
-                ),
-                linkage_confidence=0.60,
-                evidence_trail=[
-                    f"Lead inventor on US{record.patent_number}: '{title_short}' ({record.grant_date or 'date unknown'})"
-                ],
-                last_updated_per_source={"uspto": datetime.now(UTC)},
-                mesh_descriptors=[],
-            )
-        )
-    return results
-
-
-def lens_patent_to_candidates(record: LensPatentRecord) -> list[Candidate]:
-    """Extract lead inventors from a Lens.org patent record."""
-    results: list[Candidate] = []
-    inventors = record.inventors or []
-    if not inventors:
-        return results
-
-    # Use first inventor as lead (Lens doesn't flag sequence)
-    for inventor in inventors[:1]:
-        name = inventor.full_name if hasattr(inventor, "full_name") else inventor.name
-        name = name.strip()
-        if not name:
-            continue
-
-        patent_id = record.doc_number or record.lens_id
-        uuid = _make_uuid({}, name)
-        title_short = record.title[:80] if record.title else patent_id
-
-        results.append(
-            Candidate(
-                uuid=uuid,
-                strong_keys={},
-                name_variants=[name],
-                affiliations=[],
-                artifact_refs=ArtifactRefBundle(
-                    pmids=[],
-                    nct_ids=[],
-                    grant_ids=[],
-                    patent_ids=[patent_id],
-                ),
-                linkage_confidence=0.60,
-                evidence_trail=[
-                    f"Lead inventor on {patent_id}: '{title_short}'"
-                    + (f" ({record.date_published})" if record.date_published else "")
-                ],
-                last_updated_per_source={"lens": datetime.now(UTC)},
-                mesh_descriptors=[],
-            )
-        )
-    return results

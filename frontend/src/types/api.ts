@@ -61,6 +61,7 @@ export interface CandidateResult {
   has_notes?: boolean;
   shortlisted_by?: string[];
   openalex_concepts?: string[];
+  contact_email?: string | null;
 }
 
 // ===== Query Response =====

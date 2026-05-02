@@ -91,6 +91,7 @@ class CandidateResult(BaseModel):
     integrity_disclosures: list[IntegrityDisclosure]
     specialty: str | None
     evidence_trail: list[str]
+    contact_email: str | None = None
 
 
 class ExpansionInfo(BaseModel):

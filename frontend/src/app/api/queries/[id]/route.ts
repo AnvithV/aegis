@@ -51,6 +51,7 @@ interface BackendCandidate {
   evidence_trail: string[];
   source_badges?: string[];
   openalex_concepts?: string[];
+  contact_email?: string | null;
 }
 
 interface BackendQueryResponse {
@@ -107,6 +108,7 @@ function transformCandidate(c: BackendCandidate): CandidateResult {
     provenance: { weight_version: "1", integrity_rule_version: "1.0.0" },
     source_badges: c.source_badges,
     openalex_concepts: c.openalex_concepts,
+    contact_email: c.contact_email ?? null,
   };
 }
 

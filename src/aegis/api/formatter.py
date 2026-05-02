@@ -177,6 +177,7 @@ class ResultFormatter:
                     integrity_disclosures=disclosures,
                     specialty=specialty,
                     evidence_trail=rc.evidence_trail,
+                    contact_email=rc.contact_email,
                 )
             )
 
