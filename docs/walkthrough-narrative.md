@@ -183,8 +183,30 @@ The raw query `"KRAS G12C inhibitor drug discovery for lung cancer"` is sent to 
 **What a keyword classifier does: query type routing**
 Query type routing — which scoring weight vector to use — is a pure keyword classifier, not an LLM. It scans the lowercased query against three frozensets (drug discovery, clinical trial PI, policy/epi). On `"KRAS G12C inhibitor drug discovery for lung cancer"` it matches "drug" and "inhibitor" → 2 hits → confidence `0.5 + 2×0.1 = 0.70` → drug discovery weight vector. This is intentionally simple: the routing decision happens before the pipeline runs, needs to be fast, and the keyword sets are interpretable and easy to extend. An LLM would add latency and a dependency for a classification task where the decision boundary is well-defined.
 
-**What's not yet LLM-powered — and the design for it:**
-Profile summarization is the obvious next layer. The architecture for it is: after ranking, take the top-K candidates' evidence trails and pass them through Claude to generate a 2–3 sentence expert summary: *"Dr. Smith is a translational oncologist with 45 publications in RAS biology (mean RCR 3.2), PI on 3 NIH R01 grants totaling $1.8M, and currently leading a Phase 2 KRAS G12C trial at MGH. Primary expertise: KRAS inhibitor development, NSCLC, and ADMET optimization."* The evidence trail already has all the inputs; the LLM call is a presentation layer, not a data layer. This would be a 1-day add.
+**What's next: LLM-powered domain expertise classification**
+The keyword classifier works but has a fixed vocabulary. The upgrade path is a Claude call with a structured output schema: given the query text, return `{query_type, confidence, reasoning, suggested_weight_adjustments}`. This handles ambiguous queries ("novel biologics target engagement" hits neither "inhibitor" nor "clinical trial"), multi-intent queries ("Phase 2 KRAS trial with strong preclinical publication record"), and jargon the keyword frozenset doesn't cover. The API already passes `query_type_override` end-to-end, so swapping the classifier is a self-contained change — nothing downstream needs to know.
+
+**What's next: LLM-powered candidate profile summarization**
+The full design:
+1. After ranking, take the top-K candidates' structured evidence — `name`, `f_scores`, `mesh_descriptors`, `evidence_trail`, `linkage_confidence`.
+2. Send to Claude with a prompt template:
+   ```
+   You are summarizing a biomedical expert profile for a recruiter.
+   Query: {query}
+   Evidence: {evidence_trail}
+   F-scores: F1={f1_pct:.0%} (publication impact), F2={f2_pct:.0%} (funding), F5={f5_pct:.0%} (translational)
+
+   Write 2–3 sentences covering: primary research focus, career stage signal,
+   and one specific achievement from the evidence trail. Be factual — only
+   use information present in the evidence.
+   ```
+3. Cache the summary keyed on `(candidate_uuid, query_id)` — same candidate in a different query context gets a fresh summary because the relevance framing differs.
+4. Show in the candidate card as a collapsible "AI Summary" chip. Never shown without evidence — if the evidence trail is empty, no summary is generated.
+
+The inputs all exist in the current data model. The only addition is the Claude call + a `summaries` table in DuckDB to cache results. Estimated build time: half a day.
+
+**What's next: LLM-powered query suggestions and disambiguation**
+When the MeSH expansion returns fewer than 3 terms (low-confidence expansion), surface Claude's reasoning: *"Your query matched MeSH terms in oncology but the term 'target engagement' could refer to biochemistry or clinical pharmacology — which did you mean?"* This is a UX improvement that costs one extra structured Claude call and reduces bad queries before they run.
 
 ---
 
@@ -268,20 +290,27 @@ Columnar analytics for percentile ranking over 600+ candidates, join-heavy MeSH 
 
 There are things that don't fully work yet that I want to name:
 
-**1. The orchestrator uses inline scoring, not the formal F1–F7 modules.**
-The `src/aegis/scoring/` directory has proper `FxComputer` classes with author-position weighting (F1), grant-type tiers and dollar amounts (F2), last-author rate and editorial roles (F3), diminishing-returns apex scoring (F4), FDA submission + trial phase weighting (F5), mentorship lineage (F6), and board certification + hospital tier (F7). The orchestrator reimplements all of these inline with much cruder formulas — grant count instead of grant quality, string-matching "Principal Investigator" instead of structured role data, MeSH tag count instead of lineage. Wiring the formal modules in is the single highest-impact improvement to ranking quality.
-
-**2. Recency is broken.**
-Every converter stamps `last_updated_per_source = datetime.now(UTC)` at ingestion time, so every candidate gets recency ~1.0 regardless of when they last published. A paper from 2003 and a paper from 2025 are indistinguishable. The formal `Recency` class uses actual publication dates with exponential half-life decay — it just needs to be wired in.
-
-**3. NIH Reporter source filtering uses RCDC taxonomy, not MeSH.**
+**1. NIH Reporter source filtering uses RCDC taxonomy, not MeSH.**
 When we pass MeSH terms as RCDC category filters, the API finds no matching category and returns effectively random recent grants. Reporter candidates still flow through — they're just not topically filtered. The fix is a MeSH-to-RCDC crosswalk or switching to Reporter's free-text search mode.
 
-**4. The coauthor overlap feature in identity resolution is a stub.**
+**2. The coauthor overlap feature in identity resolution is a stub.**
 The `ProbabilisticLinker` has a 15% weight for co-author overlap in the Fellegi-Sunter score. The current implementation computes Jaccard between the incoming record's coauthor list and the existing candidate's *own name variants* — which almost never produces a non-zero score. When `artifact_coauthors` is empty (which is common), the weight is redistributed to the other four features automatically. So it's not silently wrong — it's just not contributing.
 
-**5. The iCite batch query is capped at 200 PMIDs.**
-With 200+ candidates each having multiple papers, the pipeline silently drops RCR scores for PMIDs beyond the cap, causing those candidates to fall back to raw publication count for F1. The fix is to paginate the iCite call.
+**3. F4 apex roster data is limited.**
+Only 60 names across 6 categories (HHMI, NAS, NAE, NAM, Lasker, NIH MERIT). HHMI alone has 300+ investigators. The scoring code is correct (diminishing-returns lookup), but the data layer needs expansion. Until then, F4 effectively flags a small subset of the true apex population.
+
+**4. The formal F1–F7 scoring modules aren't wired in.**
+The `src/aegis/scoring/` directory has proper `FxComputer` classes with author-position weighting, diminishing-returns curves, and percentile-within-cohort ranking. The orchestrator uses simpler inline formulas that capture the same signals (grant mechanism weighting, source-agnostic leadership, cross-source breadth) but without the full sophistication of the formal modules. Wiring the formal modules in is a straightforward improvement — the interfaces are compatible.
+
+### What we fixed (and why it matters)
+The following issues from earlier builds have been resolved:
+
+- **Recency** — converters now stamp `last_updated_per_source` with actual publication dates (PubMed `publication_date`, Reporter `award_notice_date` or fiscal year midpoint, CT.gov `last_update_post_date`, OpenAlex `publication_date`) instead of `datetime.now(UTC)`. Candidates who published in 2018 now score lower on recency than those who published in 2024.
+- **F2 grant quality** — scoring now weights by grant mechanism (R01/P01 = 1.0, K-series = 0.6, R03/R21 = 0.4, international/unknown = 0.2) using a log-squash normalisation. An R01 PI with 2 major grants outscores someone with 5 R03s.
+- **F3 leadership** — source-agnostic detection: counts trial PI roles (from `nct_ids`), grant PI roles (from `grant_ids`), and evidence trail patterns. CT.gov-only and OpenAlex-only candidates now receive F3 credit.
+- **F6 breadth** — replaced MeSH tag count (biased toward PubMed candidates with NLM-assigned MeSH) with cross-source evidence diversity: how many source types (PubMed, Reporter, CT.gov, OpenAlex) and artifact types (papers, grants, trials, patents) the candidate appears in.
+- **Topical fit** — replaced crude word-overlap (`hits/n_query_words`) with MeSH-based cosine similarity using `CandidateVectorBuilder` + `TopicalFit`, blended 70/30 with evidence trail word-overlap. This is source-agnostic since all converters produce MeSH or RCDC descriptors.
+- **iCite PMID cap** — removed the global 200-PMID truncation. iCite requests are now batched in 200-PMID pages so all candidates get RCR enrichment regardless of cohort size.
 
 ---
 
@@ -290,11 +319,11 @@ With 200+ candidates each having multiple papers, the pipeline silently drops RC
 > *Close with vision. Shows you're thinking like a product builder, not just an implementer.*
 
 ### Short term (scoring quality)
-- **Wire the formal F1–F7 scoring modules** into the orchestrator — the code exists, it just needs to replace the inline formulas. This single change gives us grant-type tiers (R01 vs. R03), author-position weighting, proper recency decay, and structured leadership detection.
-- **Fix recency** — use actual publication dates from PubMed/OpenAlex instead of `datetime.now(UTC)`.
-- **Prestige slider** — once F2 distinguishes R01 holders from K-award holders, add a slider to the query form that shifts the weight vector along a prestige↔accessible axis. The weight vector infrastructure already supports this.
-- **Paginate iCite** — remove the 200-PMID cap so all candidates get RCR enrichment.
+- **Wire the formal F1–F7 `FxComputer` modules** into the orchestrator — the code exists with full author-position weighting (F1), dollar-weighted grant tiers (F2), editorial role detection (F3), diminishing-returns apex curves (F4), and mentorship lineage (F6). The inline formulas now cover the key signals but the formal modules add more granularity.
+- **Prestige slider** — F2 now distinguishes R01 holders from K-award holders, so add a slider to the query form that shifts the weight vector along a prestige↔accessible axis. The weight vector infrastructure already supports this.
 - **Fix NIH Reporter RCDC mismatch** with a crosswalk or free-text search mode.
+- **Fix coauthor overlap** — the 15% Fellegi-Sunter feature is currently a stub. Fix: during PubMed ingestion, extract the full author list per paper and store it as a coauthor index keyed by PMID. When the linker runs, look up coauthors for each candidate's PMIDs and compute actual Jaccard overlap. This turns a broken feature into a meaningful signal specifically for resolving name-ambiguous researchers who consistently co-publish with the same group.
+- **Expand F4 apex roster data** — add complete HHMI investigator list (300+), full NAS/NAM/NAE membership rolls, and other award recipients to improve apex-tier detection coverage.
 
 ### Medium term (what makes this a real product)
 **The feedback loop.**
@@ -342,13 +371,27 @@ The pipeline is stateless from the source databases' perspective — every query
 2. **Change detection**: new artifact refs trigger a recency score update and optionally a webhook notification to the ATS: *"Dr. Smith just published a new KRAS paper — her relevance score for your open trial PI position just increased."*
 3. **Opt-out / right-to-be-forgotten**: the `OptOutStore` already exists. Candidates can be permanently excluded from all future queries by UUID.
 
+### Saved searches + proactive alerting
+The design: a recruiter saves a query (e.g., "KRAS G12C PI for Phase 2 trial") as a named search. A daily background job re-runs each saved query, diffs the ranked list against the last run, and fires a webhook for any candidate who:
+- Entered the top-K for the first time
+- Registered a new trial that matches the MeSH terms
+- Published a new paper above an RCR threshold
+
+The webhook payload maps directly to the ATS/CRM push-on-shortlist format already designed. No new API surface needed — just a `saved_searches` table and a scheduler. This turns Aegis from a pull tool (recruiter goes looking) into a push tool (Aegis tells you when someone new shows up).
+
+### Collaboration network and warm introductions
+The co-authorship data already being collected (PubMed author lists) is the raw material for a graph layer. After fixing the coauthor overlap feature, the same data can answer: "which candidate has a co-authorship path to someone already in our network?" A graph query like `MATCH (known)-[:COAUTHORED*1..2]-(candidate)` over the candidate store returns second-degree connections with the bridge person named. For biomedical expert recruitment, a warm introduction through a known collaborator dramatically outperforms cold outreach. This is a product-level differentiator that falls directly out of the identity resolution work already done.
+
+### Geographic expansion for international coverage
+The pipeline currently covers US-indexed sources well. To reach European drug discovery talent (ERC-funded researchers, EMBL affiliates, Wellcome Trust PIs), the source architecture makes this a ~2-day addition per source: implement a source client returning the shared `Candidate` schema, register it in `orchestrator.py`'s source map. The identity resolution, scoring, and ranking layers don't change. OpenAlex already indexes global publications and partially compensates, but grant and trial data for non-US researchers requires European-specific sources (ERC API, UKRI Gateway, EU Clinical Trials Register).
+
 ### The feedback loop as a continuous improvement engine
 Every time an analyst accepts or rejects a candidate shortlist, that signal feeds into the Plackett-Luce weight relearner. Over time:
 - The weight vectors get calibrated to *this customer's* preferences, not just the generic priors.
 - Customers who consistently prefer candidates with high RCR get a higher α exponent.
 - Customers who consistently pick recent grant recipients get a higher γ.
 
-This is the flywheel: more usage → better-calibrated weights → better results → more usage.
+This is the flywheel: more usage → better-calibrated weights → better results → more usage. The infrastructure is already built (HITL queue, feedback modal, refit API). The missing piece is closing the loop: connect the feedback store output to the Plackett-Luce optimizer and schedule a weekly refit.
 
 ---
 

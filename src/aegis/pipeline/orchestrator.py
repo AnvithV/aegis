@@ -179,16 +179,23 @@ class QueryPipeline:
 
         total_after_dedup = len(all_candidates)
 
-        # Step 4c: iCite enrichment — fetch RCR scores for ingested PMIDs
+        # Step 4c: iCite enrichment — fetch RCR scores for ALL ingested PMIDs.
+        # iCite API accepts 200 PMIDs per batch, so we paginate.
         self._rcr_map = {}
-        pmids = [p for c in all_candidates for p in c.artifact_refs.pmids]
+        pmids = list(dict.fromkeys(p for c in all_candidates for p in c.artifact_refs.pmids))
         if pmids:
             try:
                 icite = IciteClient()
-                async for rec in icite.fetch_by_pmids(pmids[:200]):
-                    if rec.relative_citation_ratio is not None:
-                        self._rcr_map[rec.pmid] = rec.relative_citation_ratio
-                logger.info("iCite enrichment: %d RCR scores fetched", len(self._rcr_map))
+                _ICITE_BATCH = 200
+                for batch_start in range(0, len(pmids), _ICITE_BATCH):
+                    batch = pmids[batch_start : batch_start + _ICITE_BATCH]
+                    async for rec in icite.fetch_by_pmids(batch):
+                        if rec.relative_citation_ratio is not None:
+                            self._rcr_map[rec.pmid] = rec.relative_citation_ratio
+                logger.info(
+                    "iCite enrichment: %d RCR scores fetched from %d PMIDs (%d batches)",
+                    len(self._rcr_map), len(pmids), (len(pmids) + _ICITE_BATCH - 1) // _ICITE_BATCH,
+                )
             except Exception:
                 logger.warning("iCite enrichment failed", exc_info=True)
 
@@ -469,6 +476,24 @@ class QueryPipeline:
         )
         return source_name, count, latency
 
+    @staticmethod
+    def _grant_mechanism_weight(grant_id: str) -> float:
+        """Weight a grant by its activity code mechanism.
+
+        R01/U01/P01 = 1.0 (major), K-series = 0.6 (career dev),
+        R03/R21 = 0.4 (small), unknown/international = 0.2.
+        """
+        code = grant_id.strip().upper()
+        if code.startswith(("R01", "U01", "P01", "R37", "DP2")):
+            return 1.0
+        if code.startswith("K"):
+            return 0.6
+        if code.startswith(("R03", "R21", "R15")):
+            return 0.4
+        if code.startswith(("R", "U", "P", "T", "F")):
+            return 0.3
+        return 0.2  # international / OpenAlex grants without activity code
+
     def _compute_scores(
         self,
         candidates: list[Candidate],
@@ -505,15 +530,27 @@ class QueryPipeline:
                 f1_raw = min(1.0, len(pmids) / 20.0)
             f_raw["f1"].append((c.uuid, f1_raw))
 
-            # F2: Funding (grant count, now includes OpenAlex international grants)
-            f2_raw = min(1.0, len(grant_ids) / 5.0)
+            # F2: Funding — weighted by grant mechanism, not raw count.
+            # R01/P01 = 1.0, K-series = 0.6, R03/R21 = 0.4, other = 0.2.
+            # Normalise to [0, 1] via log-squash: 1 - exp(-sum / 3.0).
+            if grant_ids:
+                import math as _math
+                weighted_sum = sum(self._grant_mechanism_weight(g) for g in grant_ids)
+                f2_raw = 1.0 - _math.exp(-weighted_sum / 3.0)
+            else:
+                f2_raw = 0.0
             f_raw["f2"].append((c.uuid, f2_raw))
 
-            # F3: Leadership (count evidence_trail entries with "Principal Investigator")
-            pi_hits = sum(
-                1 for e in c.evidence_trail if "Principal Investigator" in e
+            # F3: Leadership — source-agnostic signals.
+            # Credit: trial PI roles (nct_ids), grant PI roles (grant_ids),
+            # plus evidence-trail leadership patterns from ANY source.
+            trail_pi = sum(
+                1 for e in c.evidence_trail
+                if any(kw in e for kw in ("Principal Investigator", "PI on "))
             )
-            f3_raw = min(1.0, pi_hits / 3.0)
+            trial_pi_signal = min(len(nct_ids), 5)  # cap at 5 trials
+            grant_pi_signal = min(len(grant_ids), 5)  # cap at 5 grants
+            f3_raw = min(1.0, (trail_pi + trial_pi_signal * 0.6 + grant_pi_signal * 0.4) / 5.0)
             f_raw["f3"].append((c.uuid, f3_raw))
 
             # F4: Apex roster membership — use real store lookup
@@ -528,9 +565,19 @@ class QueryPipeline:
             f5_raw = min(1.0, (len(nct_ids) + len(patent_ids)) / 5.0)
             f_raw["f5"].append((c.uuid, f5_raw))
 
-            # F6: Lineage (publication breadth via unique MeSH)
-            unique_mesh = len({m.descriptor for m in c.mesh_descriptors})
-            f6_raw = min(1.0, unique_mesh / 10.0)
+            # F6: Cross-source evidence breadth (replaces MeSH-count proxy).
+            # Counts unique source types the candidate appears in, plus
+            # artifact diversity (papers + grants + trials + patents).
+            sources_present = set(c.last_updated_per_source.keys())
+            source_count = len(sources_present)  # 1-4
+            artifact_types = sum([
+                1 if pmids else 0,
+                1 if nct_ids else 0,
+                1 if grant_ids else 0,
+                1 if patent_ids else 0,
+            ])
+            # Weighted: cross-source presence (0.6) + artifact diversity (0.4)
+            f6_raw = min(1.0, (source_count * 0.6 + artifact_types * 0.4) / 3.0)
             f_raw["f6"].append((c.uuid, f6_raw))
 
             # F7: Clinician-specific
@@ -573,28 +620,52 @@ class QueryPipeline:
 
         quality_scores = qp.compute_percentiles(quality_inputs)
 
-        # Compute topical fit — source-agnostic word-coverage score.
-        # Uses query words against the full searchable text (name + MeSH + evidence).
-        # Avoids the MeSH-bonus formula which systematically favoured PubMed
-        # candidates (NLM-indexed MeSH) over Reporter/CT.gov (RCDC categories).
+        # Compute topical fit — MeSH-based cosine similarity (source-agnostic).
+        # Builds sparse vectors from MeSH terms for both query and candidate,
+        # then computes cosine similarity. Falls back to word-overlap for
+        # candidates with no MeSH descriptors (e.g. CT.gov-only).
+        from aegis.scoring.candidate_vector import CandidateVectorBuilder, QueryVectorBuilder, ArtifactWeight
+        from aegis.scoring.topical_fit import TopicalFit
+
+        qv_builder = QueryVectorBuilder()
+        cv_builder = CandidateVectorBuilder()
+        tf_scorer = TopicalFit()
+        query_vec = qv_builder.build(mesh_terms)
+
         topical_fits: dict[str, float] = {}
         n_query_words = max(len(query_words), 1)
         for c in candidates:
-            text = " ".join(
-                c.name_variants
-                + [m.descriptor.lower() for m in c.mesh_descriptors]
-                + c.evidence_trail
-            ).lower()
-            hits = sum(1 for w in query_words if w in text)
-            topical_fits[c.uuid] = hits / n_query_words
+            candidate_mesh = {m.descriptor for m in c.mesh_descriptors}
+            if candidate_mesh:
+                # MeSH-based cosine similarity
+                artifacts = [ArtifactWeight(
+                    pmid="aggregate",
+                    role_weight=1.0,
+                    venue_weight=1.0,
+                    recency_weight=1.0,
+                    evidence_type_weight=1.0,
+                    mesh_descriptors=candidate_mesh,
+                )]
+                cand_vec = cv_builder.build(artifacts)
+                cosine = tf_scorer.compute(cand_vec, query_vec)
+                # Blend: 70% cosine + 30% word-overlap for evidence trail coverage
+                text = " ".join(c.evidence_trail).lower()
+                word_hits = sum(1 for w in query_words if w in text) / n_query_words
+                topical_fits[c.uuid] = 0.7 * cosine + 0.3 * word_hits
+            else:
+                # No MeSH — fallback to word-overlap on evidence trail + name
+                text = " ".join(c.name_variants + c.evidence_trail).lower()
+                hits = sum(1 for w in query_words if w in text)
+                topical_fits[c.uuid] = hits / n_query_words
 
-        # Compute recency based on last_updated_per_source
+        # Compute recency from actual publication dates (fixed: no longer datetime.now)
         recency_scores: dict[str, float] = {}
         today = date.today()
         for c in candidates:
             if c.last_updated_per_source:
                 most_recent = max(c.last_updated_per_source.values())
                 days_ago = (today - most_recent.date()).days
+                # 5-year decay: score goes from 1.0 (today) to 0.1 (5+ years ago)
                 recency_scores[c.uuid] = min(1.0, max(0.1, 1.0 - (days_ago / 1825.0)))
             else:
                 recency_scores[c.uuid] = 0.5
