@@ -75,6 +75,7 @@ def _merge_candidates(existing: Candidate, new: Candidate) -> Candidate:
         evidence_trail=merged_trail,
         last_updated_per_source=merged_updated,
         mesh_descriptors=merged_mesh,
+        contact_email=existing.contact_email or new.contact_email,
     )
 
 

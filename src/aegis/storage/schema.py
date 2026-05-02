@@ -65,3 +65,4 @@ class Candidate(BaseModel):
     evidence_trail: list[str]
     last_updated_per_source: dict[str, datetime]
     mesh_descriptors: list[MeshDescriptor]
+    contact_email: str | None = None

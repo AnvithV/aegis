@@ -15,9 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from aegis.api.schemas import ExpansionInfo
 from aegis.ingestion.converters import (
     grant_record_to_candidates,
-    lens_patent_to_candidates,
     openalex_work_to_candidates,
-    patent_record_to_candidates,
     pubmed_record_to_candidates,
     study_record_to_candidates,
 )
@@ -33,10 +31,8 @@ from aegis.sources.apex_rosters import ApexRosterStore
 from aegis.sources.icite import IciteClient
 from aegis.sources.leie import LEIEStore
 from aegis.sources.ofac_sam import OFACSAMStore
-from aegis.sources.lens import LensClient
 from aegis.sources.ori import ORIStore
 from aegis.sources.retraction_watch import RetractionWatchStore
-from aegis.sources.uspto import UsptoClient
 from aegis.privacy.demographic_blocklist import DemographicBlocklist
 from aegis.privacy.gate import GateDecision, PrivacyGate
 from aegis.privacy.opt_out import OptOutStore
@@ -234,6 +230,7 @@ class QueryPipeline:
                                 recency=si.recency,
                                 top_artifacts=si.top_artifacts,
                                 evidence_trail=si.evidence_trail,
+                                contact_email=si.contact_email,
                             )
                             if s.candidate_uuid == c.uuid
                             else s
@@ -336,7 +333,6 @@ class QueryPipeline:
             "reporter",
             "ctgov",
             "openalex_works",
-            "uspto",
         ]
 
         progress_list: list[SourceProgress] = []
@@ -453,17 +449,6 @@ class QueryPipeline:
                         break
                 ingester.log_summary("openalex_works")
 
-            elif source_name == "uspto":
-                # PatentsView is defunct post-March 2026 migration; use Lens.org instead
-                lens_client = LensClient(api_token=os.environ.get("LENS_API_TOKEN"))
-                since = date.today().replace(year=date.today().year - 5)
-                async for lens_rec in lens_client.search_by_text(query, since=since):
-                    for candidate in lens_patent_to_candidates(lens_rec):
-                        ingester.ingest(candidate)
-                    count += 1
-                    if count >= 200:
-                        break
-                ingester.log_summary("uspto")
 
         except Exception as exc:
             latency = (time.monotonic() - start) * 1000
@@ -631,6 +616,7 @@ class QueryPipeline:
                     recency=recency_scores.get(c.uuid, 0.5),
                     top_artifacts=[],
                     evidence_trail=c.evidence_trail,
+                    contact_email=c.contact_email,
                 )
             )
 

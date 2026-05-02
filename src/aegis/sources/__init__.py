@@ -1,4 +1,4 @@
-"""Public-source ingestion clients (PubMed, NIH RePORTER, ClinicalTrials.gov, iCite)."""
+"""Public-source ingestion clients (PubMed, NIH RePORTER, ClinicalTrials.gov, iCite, OpenAlex)."""
 
 from aegis.sources.apex_rosters import ApexMembership, ApexRosterStore, ApexRosterType
 from aegis.sources.ctgov import CtgovClient, InvestigatorRole, StudyRecord
@@ -17,12 +17,6 @@ from aegis.sources.pubmed import AuthorAffiliation, PubMedClient, PubMedRecord
 from aegis.sources.reporter import GrantPI, GrantRecord, ReporterClient
 from aegis.sources.retraction_watch import RetractionRecord, RetractionWatchStore
 from aegis.sources.retry import RetryBudgetExhausted, RetryConfig, RetryPolicy
-from aegis.sources.uspto import (
-    InventorAttribution,
-    PatentAssignee,
-    PatentRecord,
-    UsptoClient,
-)
 
 __all__ = [
     "ApexMembership",
@@ -34,7 +28,6 @@ __all__ = [
     "GrantRecord",
     "IciteClient",
     "IciteRecord",
-    "InventorAttribution",
     "InvestigatorRole",
     "LEIERecord",
     "LEIEStore",
@@ -47,8 +40,6 @@ __all__ = [
     "OpenAlexWork",
     "ORIFinding",
     "ORIStore",
-    "PatentAssignee",
-    "PatentRecord",
     "PubMedClient",
     "PubMedRecord",
     "ReporterClient",
@@ -58,5 +49,4 @@ __all__ = [
     "RetryConfig",
     "RetryPolicy",
     "StudyRecord",
-    "UsptoClient",
 ]

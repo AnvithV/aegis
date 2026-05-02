@@ -34,6 +34,7 @@ class CandidateScoreInput:
         default_factory=list,
     )
     evidence_trail: list[str] = field(default_factory=list)
+    contact_email: str | None = None
     is_hard_zero: bool = False
 
 
@@ -108,6 +109,7 @@ class Ranker:
                     breakdown=breakdown,
                     top_artifacts=c.top_artifacts[:MAX_TOP_ARTIFACTS],
                     evidence_trail=c.evidence_trail,
+                    contact_email=c.contact_email,
                 )
             )
 

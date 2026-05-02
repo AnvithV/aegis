@@ -44,6 +44,7 @@ class RankedCandidate(BaseModel):
     breakdown: ComponentBreakdown
     top_artifacts: list[ContributingArtifact]
     evidence_trail: list[str]
+    contact_email: str | None = None
 
 
 class RankedList(BaseModel):
