@@ -114,7 +114,11 @@ def pubmed_record_to_candidates(record: PubMedRecord) -> list[Candidate]:
                 evidence_trail=[
                     f"Principal Investigator: '{title_short}' (PMID:{record.pmid}, {date_str})"
                 ],
-                last_updated_per_source={"pubmed": datetime.now(UTC)},
+                last_updated_per_source={
+                    "pubmed": datetime.combine(record.publication_date, datetime.min.time(), tzinfo=UTC)
+                    if record.publication_date
+                    else datetime.now(UTC)
+                },
                 mesh_descriptors=list(record.mesh_descriptors[:30]),
                 contact_email=_extract_email(author.affiliations),
             )
@@ -183,7 +187,11 @@ def grant_record_to_candidates(record: GrantRecord) -> list[Candidate]:
                 ),
                 linkage_confidence=0.93 if strong_keys.get("era_commons") else 0.78,
                 evidence_trail=trail,
-                last_updated_per_source={"reporter": datetime.now(UTC)},
+                last_updated_per_source={
+                    "reporter": datetime.combine(record.award_notice_date, datetime.min.time(), tzinfo=UTC)
+                    if record.award_notice_date
+                    else datetime(record.fiscal_year, 7, 1, tzinfo=UTC)
+                },
                 mesh_descriptors=mesh,
             )
         )
@@ -246,7 +254,11 @@ def study_record_to_candidates(record: StudyRecord) -> list[Candidate]:
                 evidence_trail=[
                     f"PI on {record.nct_id}: '{title_short}' ({record.phase or 'phase?'}, {record.status})"
                 ],
-                last_updated_per_source={"ctgov": datetime.now(UTC)},
+                last_updated_per_source={
+                    "ctgov": datetime.combine(record.last_update_post_date, datetime.min.time(), tzinfo=UTC)
+                    if record.last_update_post_date
+                    else datetime.now(UTC)
+                },
                 mesh_descriptors=mesh,
             )
         )
@@ -311,7 +323,11 @@ def openalex_work_to_candidates(record: OpenAlexWork) -> list[Candidate]:
                 evidence_trail=[
                     f"OpenAlex {record.openalex_id}: '{title_short}' ({record.cited_by_count} citations)"
                 ],
-                last_updated_per_source={"openalex": datetime.now(UTC)},
+                last_updated_per_source={
+                    "openalex": datetime.combine(record.publication_date, datetime.min.time(), tzinfo=UTC)
+                    if record.publication_date
+                    else datetime.now(UTC)
+                },
                 mesh_descriptors=mesh,
             )
         )
