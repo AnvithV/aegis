@@ -183,8 +183,30 @@ The raw query `"KRAS G12C inhibitor drug discovery for lung cancer"` is sent to 
 **What a keyword classifier does: query type routing**
 Query type routing — which scoring weight vector to use — is a pure keyword classifier, not an LLM. It scans the lowercased query against three frozensets (drug discovery, clinical trial PI, policy/epi). On `"KRAS G12C inhibitor drug discovery for lung cancer"` it matches "drug" and "inhibitor" → 2 hits → confidence `0.5 + 2×0.1 = 0.70` → drug discovery weight vector. This is intentionally simple: the routing decision happens before the pipeline runs, needs to be fast, and the keyword sets are interpretable and easy to extend. An LLM would add latency and a dependency for a classification task where the decision boundary is well-defined.
 
-**What's not yet LLM-powered — and the design for it:**
-Profile summarization is the obvious next layer. The architecture for it is: after ranking, take the top-K candidates' evidence trails and pass them through Claude to generate a 2–3 sentence expert summary: *"Dr. Smith is a translational oncologist with 45 publications in RAS biology (mean RCR 3.2), PI on 3 NIH R01 grants totaling $1.8M, and currently leading a Phase 2 KRAS G12C trial at MGH. Primary expertise: KRAS inhibitor development, NSCLC, and ADMET optimization."* The evidence trail already has all the inputs; the LLM call is a presentation layer, not a data layer. This would be a 1-day add.
+**What's next: LLM-powered domain expertise classification**
+The keyword classifier works but has a fixed vocabulary. The upgrade path is a Claude call with a structured output schema: given the query text, return `{query_type, confidence, reasoning, suggested_weight_adjustments}`. This handles ambiguous queries ("novel biologics target engagement" hits neither "inhibitor" nor "clinical trial"), multi-intent queries ("Phase 2 KRAS trial with strong preclinical publication record"), and jargon the keyword frozenset doesn't cover. The API already passes `query_type_override` end-to-end, so swapping the classifier is a self-contained change — nothing downstream needs to know.
+
+**What's next: LLM-powered candidate profile summarization**
+The full design:
+1. After ranking, take the top-K candidates' structured evidence — `name`, `f_scores`, `mesh_descriptors`, `evidence_trail`, `linkage_confidence`.
+2. Send to Claude with a prompt template:
+   ```
+   You are summarizing a biomedical expert profile for a recruiter.
+   Query: {query}
+   Evidence: {evidence_trail}
+   F-scores: F1={f1_pct:.0%} (publication impact), F2={f2_pct:.0%} (funding), F5={f5_pct:.0%} (translational)
+
+   Write 2–3 sentences covering: primary research focus, career stage signal,
+   and one specific achievement from the evidence trail. Be factual — only
+   use information present in the evidence.
+   ```
+3. Cache the summary keyed on `(candidate_uuid, query_id)` — same candidate in a different query context gets a fresh summary because the relevance framing differs.
+4. Show in the candidate card as a collapsible "AI Summary" chip. Never shown without evidence — if the evidence trail is empty, no summary is generated.
+
+The inputs all exist in the current data model. The only addition is the Claude call + a `summaries` table in DuckDB to cache results. Estimated build time: half a day.
+
+**What's next: LLM-powered query suggestions and disambiguation**
+When the MeSH expansion returns fewer than 3 terms (low-confidence expansion), surface Claude's reasoning: *"Your query matched MeSH terms in oncology but the term 'target engagement' could refer to biochemistry or clinical pharmacology — which did you mean?"* This is a UX improvement that costs one extra structured Claude call and reduces bad queries before they run.
 
 ---
 
@@ -295,6 +317,7 @@ With 200+ candidates each having multiple papers, the pipeline silently drops RC
 - **Prestige slider** — once F2 distinguishes R01 holders from K-award holders, add a slider to the query form that shifts the weight vector along a prestige↔accessible axis. The weight vector infrastructure already supports this.
 - **Paginate iCite** — remove the 200-PMID cap so all candidates get RCR enrichment.
 - **Fix NIH Reporter RCDC mismatch** with a crosswalk or free-text search mode.
+- **Fix coauthor overlap** — the 15% Fellegi-Sunter feature is currently a stub. Fix: during PubMed ingestion, extract the full author list per paper and store it as a coauthor index keyed by PMID. When the linker runs, look up coauthors for each candidate's PMIDs and compute actual Jaccard overlap. This turns a broken feature into a meaningful signal specifically for resolving name-ambiguous researchers who consistently co-publish with the same group.
 
 ### Medium term (what makes this a real product)
 **The feedback loop.**
@@ -342,13 +365,27 @@ The pipeline is stateless from the source databases' perspective — every query
 2. **Change detection**: new artifact refs trigger a recency score update and optionally a webhook notification to the ATS: *"Dr. Smith just published a new KRAS paper — her relevance score for your open trial PI position just increased."*
 3. **Opt-out / right-to-be-forgotten**: the `OptOutStore` already exists. Candidates can be permanently excluded from all future queries by UUID.
 
+### Saved searches + proactive alerting
+The design: a recruiter saves a query (e.g., "KRAS G12C PI for Phase 2 trial") as a named search. A daily background job re-runs each saved query, diffs the ranked list against the last run, and fires a webhook for any candidate who:
+- Entered the top-K for the first time
+- Registered a new trial that matches the MeSH terms
+- Published a new paper above an RCR threshold
+
+The webhook payload maps directly to the ATS/CRM push-on-shortlist format already designed. No new API surface needed — just a `saved_searches` table and a scheduler. This turns Aegis from a pull tool (recruiter goes looking) into a push tool (Aegis tells you when someone new shows up).
+
+### Collaboration network and warm introductions
+The co-authorship data already being collected (PubMed author lists) is the raw material for a graph layer. After fixing the coauthor overlap feature, the same data can answer: "which candidate has a co-authorship path to someone already in our network?" A graph query like `MATCH (known)-[:COAUTHORED*1..2]-(candidate)` over the candidate store returns second-degree connections with the bridge person named. For biomedical expert recruitment, a warm introduction through a known collaborator dramatically outperforms cold outreach. This is a product-level differentiator that falls directly out of the identity resolution work already done.
+
+### Geographic expansion for international coverage
+The pipeline currently covers US-indexed sources well. To reach European drug discovery talent (ERC-funded researchers, EMBL affiliates, Wellcome Trust PIs), the source architecture makes this a ~2-day addition per source: implement a source client returning the shared `Candidate` schema, register it in `orchestrator.py`'s source map. The identity resolution, scoring, and ranking layers don't change. OpenAlex already indexes global publications and partially compensates, but grant and trial data for non-US researchers requires European-specific sources (ERC API, UKRI Gateway, EU Clinical Trials Register).
+
 ### The feedback loop as a continuous improvement engine
 Every time an analyst accepts or rejects a candidate shortlist, that signal feeds into the Plackett-Luce weight relearner. Over time:
 - The weight vectors get calibrated to *this customer's* preferences, not just the generic priors.
 - Customers who consistently prefer candidates with high RCR get a higher α exponent.
 - Customers who consistently pick recent grant recipients get a higher γ.
 
-This is the flywheel: more usage → better-calibrated weights → better results → more usage.
+This is the flywheel: more usage → better-calibrated weights → better results → more usage. The infrastructure is already built (HITL queue, feedback modal, refit API). The missing piece is closing the loop: connect the feedback store output to the Plackett-Luce optimizer and schedule a weekly refit.
 
 ---
 
