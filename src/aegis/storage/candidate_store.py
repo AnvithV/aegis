@@ -7,6 +7,7 @@ from pathlib import Path
 
 import duckdb
 
+from aegis.config import get_db_path
 from aegis.storage.schema import Candidate
 
 _ARTIFACT_INSERT = (
@@ -19,8 +20,8 @@ _ARTIFACT_INSERT = (
 class CandidateStore:
     """Persistent store for Candidate records backed by DuckDB."""
 
-    def __init__(self, db_path: str = "aegis.duckdb") -> None:
-        self._conn = duckdb.connect(db_path)
+    def __init__(self, db_path: str | None = None) -> None:
+        self._conn = duckdb.connect(db_path or get_db_path())
         self._run_migrations()
 
     def _run_migrations(self) -> None:

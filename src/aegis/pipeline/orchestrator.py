@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from aegis.config import get_db_path
 from aegis.api.schemas import ExpansionInfo
 from aegis.ingestion.converters import (
     grant_record_to_candidates,
@@ -96,14 +97,14 @@ class QueryPipeline:
     def __init__(
         self,
         *,
-        db_path: str = "aegis.duckdb",
+        db_path: str | None = None,
         leie_store: LEIEStore | None = None,
         ofac_sam_store: OFACSAMStore | None = None,
         ori_store: ORIStore | None = None,
         retraction_store: RetractionWatchStore | None = None,
         apex_store: ApexRosterStore | None = None,
     ) -> None:
-        self._db_path = db_path
+        self._db_path = db_path or get_db_path()
         self._classifier = QueryClassifier()
         self._expander = LlmQueryExpander()
         self._leie_store = leie_store or LEIEStore()

@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, status
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from aegis.config import get_data_dir
 from aegis.learning.downstream_quality import (
     DownstreamQualityStore,
     TaskOutcome,
@@ -112,9 +113,9 @@ class TaskOutcomeResponse(BaseModel):
     derived_judgments_count: int
 
 
-# Module-level store paths
-_default_store_path = Path("data/aegis/downstream_quality.jsonl")
-_default_judgments_path = Path("data/aegis/candidate_judgments.jsonl")
+# Module-level store paths — use persistent volume on Fly.io
+_default_store_path = get_data_dir() / "downstream_quality.jsonl"
+_default_judgments_path = get_data_dir() / "candidate_judgments.jsonl"
 
 
 def _get_store(store_path: Path | None = None) -> DownstreamQualityStore:
