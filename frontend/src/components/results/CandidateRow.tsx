@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CandidateResult } from "@/types/api";
 import ScoreBreakdownChart from "./ScoreBreakdownChart";
@@ -20,6 +20,12 @@ const SOURCE_BADGE_COLORS: Record<string, string> = {
 
 type CandidateJudgment = "relevant" | "irrelevant" | null;
 
+interface ShortlistOption {
+  id: string;
+  name: string;
+  member_count?: number;
+}
+
 interface CandidateRowProps {
   candidate: CandidateResult;
   queryId?: string;
@@ -27,6 +33,10 @@ interface CandidateRowProps {
   onJudge?: (uuid: string, judgment: "relevant" | "irrelevant") => void;
   isCompareSelected?: boolean;
   onToggleCompare?: () => void;
+  shortlists?: ShortlistOption[];
+  candidateShortlistIds?: Set<string>;
+  onShortlistAdd?: (candidateUuid: string, candidateName: string, shortlistId: string) => void;
+  onShortlistCreate?: (candidateUuid: string, candidateName: string, newName: string) => void;
 }
 
 export default function CandidateRow({
@@ -36,9 +46,28 @@ export default function CandidateRow({
   onJudge,
   isCompareSelected,
   onToggleCompare,
+  shortlists,
+  candidateShortlistIds,
+  onShortlistAdd,
+  onShortlistCreate,
 }: CandidateRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isShortlisted, setIsShortlisted] = useState(false);
+  const [showShortlistPicker, setShowShortlistPicker] = useState(false);
+  const [newShortlistName, setNewShortlistName] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const isShortlisted = candidateShortlistIds ? candidateShortlistIds.size > 0 : false;
+
+  // Close shortlist picker on click outside
+  useEffect(() => {
+    if (!showShortlistPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowShortlistPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showShortlistPicker]);
 
   const f1f7 = candidate.score_components;
 
@@ -200,20 +229,90 @@ export default function CandidateRow({
               </div>
             )}
 
-            {/* Shortlist star */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsShortlisted(!isShortlisted);
-              }}
-              className={`p-1 rounded hover:bg-gray-100 ${isShortlisted ? "text-yellow-500" : "text-gray-300"}`}
-              title={isShortlisted ? "Remove from shortlist" : "Add to shortlist"}
-            >
-              <svg className="h-5 w-5" fill={isShortlisted ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-              </svg>
-            </button>
+            {/* Shortlist star + picker */}
+            <div ref={pickerRef} className="relative" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setShowShortlistPicker(!showShortlistPicker)}
+                className={`p-1 rounded hover:bg-gray-100 ${isShortlisted ? "text-yellow-500" : "text-gray-300"}`}
+                title={isShortlisted ? "In shortlist (click to manage)" : "Add to shortlist"}
+              >
+                <svg className="h-5 w-5" fill={isShortlisted ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+              </button>
+
+              {showShortlistPicker && (
+                <div className="absolute right-0 top-8 z-50 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">Add to shortlist</p>
+                  {shortlists && shortlists.length > 0 ? (
+                    <div className="space-y-1 mb-2 max-h-40 overflow-y-auto">
+                      {shortlists.map((sl) => {
+                        const alreadyIn = candidateShortlistIds?.has(sl.id) ?? false;
+                        return (
+                          <button
+                            key={sl.id}
+                            type="button"
+                            onClick={() => {
+                              if (!alreadyIn && onShortlistAdd) {
+                                onShortlistAdd(candidate.uuid, candidate.name, sl.id);
+                              }
+                              setShowShortlistPicker(false);
+                            }}
+                            disabled={alreadyIn}
+                            className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                              alreadyIn
+                                ? "text-gray-400 bg-gray-50 cursor-default"
+                                : "text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                            }`}
+                          >
+                            <span>{sl.name}</span>
+                            {alreadyIn && <span className="ml-1 text-xs text-green-600">&#10003;</span>}
+                            {!alreadyIn && sl.member_count !== undefined && (
+                              <span className="ml-1 text-xs text-gray-400">({sl.member_count})</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 mb-2">No shortlists yet.</p>
+                  )}
+                  <div className="border-t border-gray-100 pt-2">
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={newShortlistName}
+                        onChange={(e) => setNewShortlistName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newShortlistName.trim() && onShortlistCreate) {
+                            onShortlistCreate(candidate.uuid, candidate.name, newShortlistName.trim());
+                            setNewShortlistName("");
+                            setShowShortlistPicker(false);
+                          }
+                        }}
+                        placeholder="New shortlist..."
+                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newShortlistName.trim() && onShortlistCreate) {
+                            onShortlistCreate(candidate.uuid, candidate.name, newShortlistName.trim());
+                            setNewShortlistName("");
+                            setShowShortlistPicker(false);
+                          }
+                        }}
+                        disabled={!newShortlistName.trim()}
+                        className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="text-right">
               <VarianceBand
